@@ -26,11 +26,13 @@ barekube_usage() {
   echo
   # :command.usage_commands
   printf "%s\n" "$(bold "Commands:")"
-  printf "  %s   \n" "$(green "install")               "
-  [[ -n "$long_usage" ]] && printf "  %s   Install and configure barekube dependencies\n" "$(green "install dependencies")  "
-  [[ -n "$long_usage" ]] && printf "  %s   Install and configure barekube kubernetes distribution (k3s)\n" "$(green "install initial-master")"
-  [[ -n "$long_usage" ]] && printf "  %s   Install and configure another k3s master node\n" "$(green "install master-node")   "
-  [[ -n "$long_usage" ]] && printf "  %s   Install and configure k3s agent node\n" "$(green "install agent-node")    "
+  printf "  %s   \n" "$(green "install")                      "
+  [[ -n "$long_usage" ]] && printf "  %s   Install and configure barekube dependencies\n" "$(green "install dependencies")         "
+  [[ -n "$long_usage" ]] && printf "  %s   Install and configure barekube kubernetes distribution (k3s)\n" "$(green "install initial-master")       "
+  [[ -n "$long_usage" ]] && printf "  %s   Install and configure another k3s master node\n" "$(green "install master-node")          "
+  [[ -n "$long_usage" ]] && printf "  %s   Install and configure k3s agent node\n" "$(green "install agent-node")           "
+  printf "  %s   To fix multipathd issue, please visit https://longhorn.io/kb/troubleshooting-volume-with-multipath/\n" "$(green "longhorn")                     "
+  [[ -n "$long_usage" ]] && printf "  %s   Install and configure Longhorn storage dependencies\n" "$(green "longhorn install-dependencies")"
   echo
 
   # :command.long_usage
@@ -81,7 +83,8 @@ barekube_install_usage() {
     printf "%s\n" "$(bold "Examples:")"
     printf "  barekube install dependencies\n"
     printf "  barekube install initial-master --reinstall\n"
-    printf "  barekube install master\n"
+    printf "  barekube install master-node\n"
+    printf "  barekube install agent-node --reinstall\n"
     echo
 
   fi
@@ -189,6 +192,57 @@ barekube_install_agent_node_usage() {
   fi
 }
 
+# :command.usage
+barekube_longhorn_usage() {
+  printf "barekube longhorn - To fix multipathd issue, please visit https://longhorn.io/kb/troubleshooting-volume-with-multipath/\n\n"
+
+  printf "%s\n" "$(bold "Usage:")"
+  printf "  barekube longhorn COMMAND\n"
+  printf "  barekube longhorn [COMMAND] --help | -h\n"
+  echo
+  # :command.usage_commands
+  printf "%s\n" "$(bold "Commands:")"
+  printf "  %s   Install and configure Longhorn storage dependencies\n" "$(green "install-dependencies")"
+  echo
+
+  # :command.long_usage
+  if [[ -n "$long_usage" ]]; then
+    printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_fixed_flags
+    printf "  %s\n" "$(magenta "--help, -h")"
+    printf "    Show this help\n"
+    echo
+
+    # :command.usage_examples
+    printf "%s\n" "$(bold "Examples:")"
+    printf "  barekube longhorn install-dependencies\n"
+    echo
+
+  fi
+}
+
+# :command.usage
+barekube_longhorn_install_dependencies_usage() {
+  printf "barekube longhorn install-dependencies - Install and configure Longhorn storage dependencies\n\n"
+
+  printf "%s\n" "$(bold "Usage:")"
+  printf "  barekube longhorn install-dependencies\n"
+  printf "  barekube longhorn install-dependencies --help | -h\n"
+  echo
+
+  # :command.long_usage
+  if [[ -n "$long_usage" ]]; then
+    printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_fixed_flags
+    printf "  %s\n" "$(magenta "--help, -h")"
+    printf "    Show this help\n"
+    echo
+
+  fi
+}
+
 # :command.normalize_input
 # :command.normalize_input_function
 normalize_input() {
@@ -253,7 +307,7 @@ inspect_args() {
 }
 
 # :command.user_lib
-# ./src/functions.sh
+# ./src/barekube.sh
 #!/bin/bash
 
 update_packages() {
@@ -425,6 +479,18 @@ install_k3s_agent() {
     eval "$COMMAND"
     exit_if_error "Failed to install k3s"
     return 0
+    return 0
+}
+
+# ./src/longhorn.sh
+#!/bin/bash
+install_longhorn_dependencies() {
+    echo_message "Updating packages..." && sudo apt update
+    echo_message "Installing open-iscsi..." && sudo apt install -y open-iscsi
+    echo_message "Installing bash..." && sudo apt install -y bash
+    echo_message "Installing curl..." && sudo apt install -y curl
+    echo_message "Installing grep..." && sudo apt install -y grep
+    echo_message "Installing nfs-common..." && sudo apt install -y nfs-common
     return 0
 }
 
@@ -670,6 +736,24 @@ barekube_install_agent_node_command() {
 
 }
 
+# :command.function
+barekube_longhorn_install_dependencies_command() {
+
+  # ./commands/longhorn/install-dependencies.sh
+  echo "# This file is located at './commands/longhorn/install-dependencies.sh'."
+  echo "# It contains the implementation for the 'barekube longhorn install-dependencies' command."
+  echo "# The code you write here will be wrapped by a function named 'barekube_longhorn_install_dependencies_command()'."
+  echo "# Feel free to edit this file; your changes will persist when regenerating."
+  inspect_args
+
+  echo_info "Installing longhorn dependencies..."
+  install_longhorn_dependencies
+
+  echo_final "Failed to install longhorn dependencies." "Longhorn dependencies are installed succcessfully."
+  echo_info "To fix multipath issue, please follow instructions: $(magenta """https://longhorn.io/kb/troubleshooting-volume-with-multipath/""")"
+
+}
+
 # :command.parse_requirements
 parse_requirements() {
   # :command.fixed_flags_filter
@@ -704,6 +788,13 @@ parse_requirements() {
       action="install"
       shift
       barekube_install_parse_requirements "$@"
+      shift $#
+      ;;
+
+    longhorn)
+      action="longhorn"
+      shift
+      barekube_longhorn_parse_requirements "$@"
       shift $#
       ;;
 
@@ -1038,6 +1129,119 @@ barekube_install_agent_node_parse_requirements() {
 
 }
 
+# :command.parse_requirements
+barekube_longhorn_parse_requirements() {
+  # :command.fixed_flags_filter
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      --help | -h)
+        long_usage=yes
+        barekube_longhorn_usage
+        exit
+        ;;
+
+      *)
+        break
+        ;;
+
+    esac
+  done
+
+  # :command.command_filter
+  action=${1:-}
+
+  case $action in
+    -*) ;;
+
+    install-dependencies)
+      action="install-dependencies"
+      shift
+      barekube_longhorn_install_dependencies_parse_requirements "$@"
+      shift $#
+      ;;
+
+    # :command.command_fallback
+    "")
+      barekube_longhorn_usage >&2
+      exit 1
+      ;;
+
+    *)
+      printf "invalid command: %s\n" "$action" >&2
+      exit 1
+      ;;
+
+  esac
+
+  # :command.parse_requirements_while
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+
+      -?*)
+        printf "invalid option: %s\n" "$key" >&2
+        exit 1
+        ;;
+
+      *)
+        # :command.parse_requirements_case
+        # :command.parse_requirements_case_simple
+        printf "invalid argument: %s\n" "$key" >&2
+        exit 1
+
+        ;;
+
+    esac
+  done
+
+}
+
+# :command.parse_requirements
+barekube_longhorn_install_dependencies_parse_requirements() {
+  # :command.fixed_flags_filter
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      --help | -h)
+        long_usage=yes
+        barekube_longhorn_install_dependencies_usage
+        exit
+        ;;
+
+      *)
+        break
+        ;;
+
+    esac
+  done
+
+  # :command.command_filter
+  action="longhorn install-dependencies"
+
+  # :command.parse_requirements_while
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+
+      -?*)
+        printf "invalid option: %s\n" "$key" >&2
+        exit 1
+        ;;
+
+      *)
+        # :command.parse_requirements_case
+        # :command.parse_requirements_case_simple
+        printf "invalid argument: %s\n" "$key" >&2
+        exit 1
+
+        ;;
+
+    esac
+  done
+
+}
+
 # :command.initialize
 initialize() {
   declare -g version="0.1.0"
@@ -1062,6 +1266,8 @@ run() {
     "install initial-master") barekube_install_initial_master_command ;;
     "install master-node") barekube_install_master_node_command ;;
     "install agent-node") barekube_install_agent_node_command ;;
+    "longhorn") barekube_longhorn_command ;;
+    "longhorn install-dependencies") barekube_longhorn_install_dependencies_command ;;
   esac
 }
 

@@ -38,9 +38,17 @@ commands:
   examples:
   - barekube install dependencies
   - barekube install initial-master --reinstall
-  - barekube install master
+  - barekube install master-node
+  - barekube install agent-node --reinstall
 
-
+- name: longhorn
+  expose: true
+  commands:
+    - name: install-dependencies
+      help: Install and configure Longhorn storage dependencies
+  help: To fix multipathd issue, please visit https://longhorn.io/kb/troubleshooting-volume-with-multipath/
+  examples:
+  - barekube longhorn install-dependencies
 footer: |-
     MIT License: https://github.com/kostiantyn-matsebora/barekube/blob/master/LICENSE
     Copyright (c) 2025 Kostiantyn Matsebora
