@@ -1,0 +1,47 @@
+name: barekube
+extensible: true
+help: CLI that provides functionality for installing and configuring bare kubernetes based on k3s and gVisor.
+version: 0.1.0
+
+x_markdown_footer: |-
+      # ISSUE TRACKER
+    
+      Report issues at <https://github.com/kostiantyn-matsebora/barekube>
+
+      # LICENSE
+      [MIT License](https://github.com/kostiantyn-matsebora/barekube/blob/master/LICENSE)
+
+commands:
+- name: install
+  expose: true
+  commands:
+    - name: dependencies
+      help: Install and configure barekube dependencies
+
+    - name: initial-master
+      help: Install and configure barekube kubernetes distribution (k3s)
+      flags:
+        - long: --reinstall
+          help: Reinstall k3s
+
+    - name: master-node
+      help: Install and configure another k3s master node
+      flags:
+        - long: --reinstall
+          help: Reinstall k3s
+
+    - name: agent-node
+      help: Install and configure k3s agent node
+      flags:
+        - long: --reinstall
+          help: Reinstall k3s
+  examples:
+  - barekube install dependencies
+  - barekube install initial-master --reinstall
+  - barekube install master
+
+
+footer: |-
+    MIT License: https://github.com/kostiantyn-matsebora/barekube/blob/master/LICENSE
+    Copyright (c) 2025 Kostiantyn Matsebora
+
