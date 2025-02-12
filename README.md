@@ -45,7 +45,7 @@ To install barekube CLI you simply must do the following steps:
 - Add an alias to your `.bashrc` or `.bash_profile` file:
 
   ```Bash
-  echo "alias workspace='$HOME/bin/barekube'" >> $HOME/.bashrc
+  echo "alias barekube='$HOME/bin/barekube'" >> $HOME/.bashrc
   ```
 
 - Reload your shell:
