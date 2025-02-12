@@ -29,3 +29,30 @@ using YAML-based specifications like this:
         role: agent
         IP: 192.168.1.30
 ```
+
+## Installation
+
+To install barekube CLI you simply must do the following steps:
+
+- Download barekube CLI script the destination directory, for instance `$HOME/bin`: 
+
+  ```Bash
+    mkdir -p $HOME/bin
+    wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/refs/heads/gvisor/cli/release/barekube -O $HOME/bin/barekube
+    chmod +x $HOME/bin/barekube
+  ```
+
+- Add an alias to your `.bashrc` or `.bash_profile` file:
+
+  ```Bash
+  echo "alias workspace='$HOME/bin/barekube'" >> $HOME/.bashrc
+  ```
+
+- Reload your shell:
+
+  ```Bash
+  source $HOME/.bashrc
+  ```
+## Usage
+
+After installation, you can use barekube CLI by running `barekube --help` command in your terminal. It will show you a help message with available commands.
