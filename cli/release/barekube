@@ -28,7 +28,7 @@ barekube_usage() {
   printf "%s\n" "$(bold "Commands:")"
   printf "  %s   Install and configure barekube and dependencies\n" "$(green "install")                      "
   [[ -n "$long_usage" ]] && printf "  %s   Install and configure barekube dependencies\n" "$(green "install dependencies")         "
-  [[ -n "$long_usage" ]] && printf "  %s   Install and configure barekube kubernetes distribution (k3s)\n" "$(green "install initial-master")       "
+  [[ -n "$long_usage" ]] && printf "  %s   Install and configure k3s initial (first) master node\n" "$(green "install initial-master")       "
   [[ -n "$long_usage" ]] && printf "  %s   Install and configure another k3s master node\n" "$(green "install master-node")          "
   [[ -n "$long_usage" ]] && printf "  %s   Install and configure k3s agent node\n" "$(green "install agent-node")           "
   [[ -n "$long_usage" ]] && printf "  %s   Install and configure gVisor for existing k3s node\n" "$(green "install gvisor")               "
@@ -73,7 +73,7 @@ barekube_install_usage() {
   # :command.usage_commands
   printf "%s\n" "$(bold "Commands:")"
   printf "  %s   Install and configure barekube dependencies\n" "$(green "dependencies")         "
-  printf "  %s   Install and configure barekube kubernetes distribution (k3s)\n" "$(green "initial-master")       "
+  printf "  %s   Install and configure k3s initial (first) master node\n" "$(green "initial-master")       "
   printf "  %s   Install and configure another k3s master node\n" "$(green "master-node")          "
   printf "  %s   Install and configure k3s agent node\n" "$(green "agent-node")           "
   printf "  %s   Install and configure gVisor for existing k3s node\n" "$(green "gvisor")               "
@@ -115,7 +115,7 @@ barekube_install_dependencies_usage() {
 
 # :command.usage
 barekube_install_initial_master_usage() {
-  printf "barekube install initial-master - Install and configure barekube kubernetes distribution (k3s)\n\n"
+  printf "barekube install initial-master - Install and configure k3s initial (first) master node\n\n"
 
   printf "%s\n" "$(bold "Usage:")"
   printf "  barekube install initial-master [OPTIONS]\n"
@@ -510,7 +510,7 @@ upgrade_barekube() {
     fi
   fi
   echo_message "Upgrading barekube CLI at $BAREKUBE_PATH"
-  wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/release/barekube -O "$BAREKUBE_PATH/barekube"
+  wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/cli/release/barekube -O "$BAREKUBE_PATH/barekube"
   chmod +x "$BAREKUBE_PATH/barekube"
   exit_if_error "Error upgrading barekube"
   echo_info "Barekube CLI is upgraded successfully to version $(barekube --version)"

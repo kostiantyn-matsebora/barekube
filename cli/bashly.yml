@@ -20,7 +20,7 @@ commands:
       help: Install and configure barekube dependencies
 
     - name: initial-master
-      help: Install and configure barekube kubernetes distribution (k3s)
+      help: Install and configure k3s initial (first) master node
       flags:
         - long: --reinstall
           help: Reinstall k3s
