@@ -26,13 +26,21 @@ barekube_usage() {
   echo
   # :command.usage_commands
   printf "%s\n" "$(bold "Commands:")"
-  printf "  %s   \n" "$(green "install")                      "
+  printf "  %s   Install and configure barekube and dependencies\n" "$(green "install")                      "
   [[ -n "$long_usage" ]] && printf "  %s   Install and configure barekube dependencies\n" "$(green "install dependencies")         "
   [[ -n "$long_usage" ]] && printf "  %s   Install and configure barekube kubernetes distribution (k3s)\n" "$(green "install initial-master")       "
   [[ -n "$long_usage" ]] && printf "  %s   Install and configure another k3s master node\n" "$(green "install master-node")          "
   [[ -n "$long_usage" ]] && printf "  %s   Install and configure k3s agent node\n" "$(green "install agent-node")           "
-  printf "  %s   To fix multipathd issue, please visit https://longhorn.io/kb/troubleshooting-volume-with-multipath/\n" "$(green "longhorn")                     "
-  [[ -n "$long_usage" ]] && printf "  %s   Install and configure Longhorn storage dependencies\n" "$(green "longhorn install-dependencies")"
+  [[ -n "$long_usage" ]] && printf "  %s   Install and configure gVisor for existing k3s node\n" "$(green "install gvisor")               "
+  [[ -n "$long_usage" ]] && printf "  %s   Install and configure Longhorn storage dependencies\n" "$(green "install longhorn-dependencies")"
+  printf "  %s   \n" "$(green "k3s")                          "
+  [[ -n "$long_usage" ]] && printf "  %s   Start k3s master node\n" "$(green "k3s start")                    "
+  [[ -n "$long_usage" ]] && printf "  %s   Stop k3s master node\n" "$(green "k3s stop")                     "
+  [[ -n "$long_usage" ]] && printf "  %s   Uninstall k3s and all related containers\n" "$(green "k3s uninstall")                "
+  [[ -n "$long_usage" ]] && printf "  %s   Kill k3s and all k3s related containers\n" "$(green "k3s killall")                  "
+  [[ -n "$long_usage" ]] && printf "  %s   Start k3s agent node\n" "$(green "k3s start-agent")              "
+  [[ -n "$long_usage" ]] && printf "  %s   Stop k3s agent node\n" "$(green "k3s stop-agent")               "
+  printf "  %s   Upgrade barekube CLI to latest version\n" "$(green "upgrade")                      "
   echo
 
   # :command.long_usage
@@ -56,7 +64,7 @@ barekube_usage() {
 
 # :command.usage
 barekube_install_usage() {
-  printf "barekube install\n\n"
+  printf "barekube install - Install and configure barekube and dependencies\n\n"
 
   printf "%s\n" "$(bold "Usage:")"
   printf "  barekube install COMMAND\n"
@@ -64,10 +72,12 @@ barekube_install_usage() {
   echo
   # :command.usage_commands
   printf "%s\n" "$(bold "Commands:")"
-  printf "  %s   Install and configure barekube dependencies\n" "$(green "dependencies")  "
-  printf "  %s   Install and configure barekube kubernetes distribution (k3s)\n" "$(green "initial-master")"
-  printf "  %s   Install and configure another k3s master node\n" "$(green "master-node")   "
-  printf "  %s   Install and configure k3s agent node\n" "$(green "agent-node")    "
+  printf "  %s   Install and configure barekube dependencies\n" "$(green "dependencies")         "
+  printf "  %s   Install and configure barekube kubernetes distribution (k3s)\n" "$(green "initial-master")       "
+  printf "  %s   Install and configure another k3s master node\n" "$(green "master-node")          "
+  printf "  %s   Install and configure k3s agent node\n" "$(green "agent-node")           "
+  printf "  %s   Install and configure gVisor for existing k3s node\n" "$(green "gvisor")               "
+  printf "  %s   Install and configure Longhorn storage dependencies\n" "$(green "longhorn-dependencies")"
   echo
 
   # :command.long_usage
@@ -77,14 +87,6 @@ barekube_install_usage() {
     # :command.usage_fixed_flags
     printf "  %s\n" "$(magenta "--help, -h")"
     printf "    Show this help\n"
-    echo
-
-    # :command.usage_examples
-    printf "%s\n" "$(bold "Examples:")"
-    printf "  barekube install dependencies\n"
-    printf "  barekube install initial-master --reinstall\n"
-    printf "  barekube install master-node\n"
-    printf "  barekube install agent-node --reinstall\n"
     echo
 
   fi
@@ -193,16 +195,63 @@ barekube_install_agent_node_usage() {
 }
 
 # :command.usage
-barekube_longhorn_usage() {
-  printf "barekube longhorn - To fix multipathd issue, please visit https://longhorn.io/kb/troubleshooting-volume-with-multipath/\n\n"
+barekube_install_gvisor_usage() {
+  printf "barekube install gvisor - Install and configure gVisor for existing k3s node\n\n"
 
   printf "%s\n" "$(bold "Usage:")"
-  printf "  barekube longhorn COMMAND\n"
-  printf "  barekube longhorn [COMMAND] --help | -h\n"
+  printf "  barekube install gvisor\n"
+  printf "  barekube install gvisor --help | -h\n"
+  echo
+
+  # :command.long_usage
+  if [[ -n "$long_usage" ]]; then
+    printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_fixed_flags
+    printf "  %s\n" "$(magenta "--help, -h")"
+    printf "    Show this help\n"
+    echo
+
+  fi
+}
+
+# :command.usage
+barekube_install_longhorn_dependencies_usage() {
+  printf "barekube install longhorn-dependencies - Install and configure Longhorn storage dependencies\n\n"
+
+  printf "%s\n" "$(bold "Usage:")"
+  printf "  barekube install longhorn-dependencies\n"
+  printf "  barekube install longhorn-dependencies --help | -h\n"
+  echo
+
+  # :command.long_usage
+  if [[ -n "$long_usage" ]]; then
+    printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_fixed_flags
+    printf "  %s\n" "$(magenta "--help, -h")"
+    printf "    Show this help\n"
+    echo
+
+  fi
+}
+
+# :command.usage
+barekube_k3s_usage() {
+  printf "barekube k3s\n\n"
+
+  printf "%s\n" "$(bold "Usage:")"
+  printf "  barekube k3s COMMAND\n"
+  printf "  barekube k3s [COMMAND] --help | -h\n"
   echo
   # :command.usage_commands
   printf "%s\n" "$(bold "Commands:")"
-  printf "  %s   Install and configure Longhorn storage dependencies\n" "$(green "install-dependencies")"
+  printf "  %s   Start k3s master node\n" "$(green "start")      "
+  printf "  %s   Stop k3s master node\n" "$(green "stop")       "
+  printf "  %s   Uninstall k3s and all related containers\n" "$(green "uninstall")  "
+  printf "  %s   Kill k3s and all k3s related containers\n" "$(green "killall")    "
+  printf "  %s   Start k3s agent node\n" "$(green "start-agent")"
+  printf "  %s   Stop k3s agent node\n" "$(green "stop-agent") "
   echo
 
   # :command.long_usage
@@ -216,24 +265,159 @@ barekube_longhorn_usage() {
 
     # :command.usage_examples
     printf "%s\n" "$(bold "Examples:")"
-    printf "  barekube longhorn install-dependencies\n"
+    printf "  barekube install dependencies\n"
+    printf "  barekube install initial-master --reinstall\n"
+    printf "  barekube install master-node\n"
+    printf "  barekube install agent-node --reinstall\n"
     echo
 
   fi
 }
 
 # :command.usage
-barekube_longhorn_install_dependencies_usage() {
-  printf "barekube longhorn install-dependencies - Install and configure Longhorn storage dependencies\n\n"
+barekube_k3s_start_usage() {
+  printf "barekube k3s start - Start k3s master node\n\n"
 
   printf "%s\n" "$(bold "Usage:")"
-  printf "  barekube longhorn install-dependencies\n"
-  printf "  barekube longhorn install-dependencies --help | -h\n"
+  printf "  barekube k3s start\n"
+  printf "  barekube k3s start --help | -h\n"
   echo
 
   # :command.long_usage
   if [[ -n "$long_usage" ]]; then
     printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_fixed_flags
+    printf "  %s\n" "$(magenta "--help, -h")"
+    printf "    Show this help\n"
+    echo
+
+  fi
+}
+
+# :command.usage
+barekube_k3s_stop_usage() {
+  printf "barekube k3s stop - Stop k3s master node\n\n"
+
+  printf "%s\n" "$(bold "Usage:")"
+  printf "  barekube k3s stop\n"
+  printf "  barekube k3s stop --help | -h\n"
+  echo
+
+  # :command.long_usage
+  if [[ -n "$long_usage" ]]; then
+    printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_fixed_flags
+    printf "  %s\n" "$(magenta "--help, -h")"
+    printf "    Show this help\n"
+    echo
+
+  fi
+}
+
+# :command.usage
+barekube_k3s_uninstall_usage() {
+  printf "barekube k3s uninstall - Uninstall k3s and all related containers\n\n"
+
+  printf "%s\n" "$(bold "Usage:")"
+  printf "  barekube k3s uninstall\n"
+  printf "  barekube k3s uninstall --help | -h\n"
+  echo
+
+  # :command.long_usage
+  if [[ -n "$long_usage" ]]; then
+    printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_fixed_flags
+    printf "  %s\n" "$(magenta "--help, -h")"
+    printf "    Show this help\n"
+    echo
+
+  fi
+}
+
+# :command.usage
+barekube_k3s_killall_usage() {
+  printf "barekube k3s killall - Kill k3s and all k3s related containers\n\n"
+
+  printf "%s\n" "$(bold "Usage:")"
+  printf "  barekube k3s killall\n"
+  printf "  barekube k3s killall --help | -h\n"
+  echo
+
+  # :command.long_usage
+  if [[ -n "$long_usage" ]]; then
+    printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_fixed_flags
+    printf "  %s\n" "$(magenta "--help, -h")"
+    printf "    Show this help\n"
+    echo
+
+  fi
+}
+
+# :command.usage
+barekube_k3s_start_agent_usage() {
+  printf "barekube k3s start-agent - Start k3s agent node\n\n"
+
+  printf "%s\n" "$(bold "Usage:")"
+  printf "  barekube k3s start-agent\n"
+  printf "  barekube k3s start-agent --help | -h\n"
+  echo
+
+  # :command.long_usage
+  if [[ -n "$long_usage" ]]; then
+    printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_fixed_flags
+    printf "  %s\n" "$(magenta "--help, -h")"
+    printf "    Show this help\n"
+    echo
+
+  fi
+}
+
+# :command.usage
+barekube_k3s_stop_agent_usage() {
+  printf "barekube k3s stop-agent - Stop k3s agent node\n\n"
+
+  printf "%s\n" "$(bold "Usage:")"
+  printf "  barekube k3s stop-agent\n"
+  printf "  barekube k3s stop-agent --help | -h\n"
+  echo
+
+  # :command.long_usage
+  if [[ -n "$long_usage" ]]; then
+    printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_fixed_flags
+    printf "  %s\n" "$(magenta "--help, -h")"
+    printf "    Show this help\n"
+    echo
+
+  fi
+}
+
+# :command.usage
+barekube_upgrade_usage() {
+  printf "barekube upgrade - Upgrade barekube CLI to latest version\n\n"
+
+  printf "%s\n" "$(bold "Usage:")"
+  printf "  barekube upgrade [OPTIONS]\n"
+  printf "  barekube upgrade --help | -h\n"
+  echo
+
+  # :command.long_usage
+  if [[ -n "$long_usage" ]]; then
+    printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_flags
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--yes, -y")"
+    printf "    Automaticaly upgrades CLI into $HOME/bin directory.\n"
+    echo
 
     # :command.usage_fixed_flags
     printf "  %s\n" "$(magenta "--help, -h")"
@@ -309,6 +493,31 @@ inspect_args() {
 # :command.user_lib
 # ./src/barekube.sh
 #!/bin/bash
+#!/bin/bash
+
+upgrade_barekube() {
+  AUTOMATIC_MODE=$(is_automatic_mode "$1")
+
+  echo_info "Upgrading barekube CLI $(barekube --version)"
+  local BAREKUBE_HOME_PATH="$HOME/bin"
+  local BAREKUBE_PATH="$BAREKUBE_HOME_PATH"
+  if [[ $AUTOMATIC_MODE != "0" ]]
+  then
+    BAREKUBE_PATH="$(question "Enter the path where workspace is installed ($BAREKUBE_HOME_PATH as default): ")"
+    if [ -z "$BAREKUBE_PATH" ]
+    then
+        BAREKUBE_PATH="$BAREKUBE_HOME_PATH"
+    fi
+  fi
+  echo_message "Upgrading barekube CLI at $BAREKUBE_PATH"
+  wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/release/barekube -O "$BAREKUBE_PATH/barekube"
+  chmod +x "$BAREKUBE_PATH/barekube"
+  exit_if_error "Error upgrading barekube"
+  echo_info "Barekube CLI is upgraded successfully to version $(barekube --version)"
+}
+
+# ./src/k3s.sh
+#!/bin/bash
 
 update_packages() {
     echo_message "Updating packages..."
@@ -324,7 +533,6 @@ install_containerd() {
 }
 
 install_gvisor() {
-
      echo_message "Installing gVisor dependencies..."
      sudo apt install -y \
         apt-transport-https \
@@ -344,27 +552,28 @@ install_gvisor() {
     exit_if_error "Failed to install gVisor"
 }
 
-register_gvisor_to_containerd() {
+register_gvisor_to_k3s() {
     echo_message "Checking containerd configuration..."
-    grep -q ".containerd.runtimes.runsc" /etc/containerd/config.toml
+    grep -q ".containerd.runtimes.runsc" /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
 
     if [ $? -ne "0" ]
     then
+    echo_message "Copying containerd config to template..."
+    cp /var/lib/rancher/k3s/agent/etc/containerd/config.toml /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
+
     echo_info "Adding runsc runtime to containerd configuration..."
-cat << EOF | sudo tee /etc/containerd/config.toml
-            version = 2
-            [plugins."io.containerd.runtime.v1.linux"]
-            shim_debug = true
-            [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
-            runtime_type = "io.containerd.runc.v2"
-            [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
-            runtime_type = "io.containerd.runsc.v1"
+sudo tee -a /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl <<EOF
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
+  runtime_type = "io.containerd.runsc.v1"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc.options]
+  TypeUrl = "io.containerd.runsc.v1.options"
+  ConfigPath = "/etc/containerd/runsc.toml"
 EOF
     exit_if_error "Failed to add runsc runtime to containerd configuration"
 
-    echo_message "Restarting containerd..."
-    sudo systemctl restart containerd
-    exit_if_error "Failed to register gVisor to containerd"
+    echo_message "Restarting k3s..."
+    sudo systemctl restart k3s
+    exit_if_error "Failed to register gVisor to k3s"
     fi
     return 0
 }
@@ -378,6 +587,7 @@ install_wireguard() {
 check_k3s_installed() {
     echo_message "Checking if k3s is already installed..."
     check_if_command_exists "k3s"
+     # shellcheck disable=SC2181
      if [[ $? -eq 0 ]]
      then
          echo_info "k3s is already installed."
@@ -390,23 +600,27 @@ check_k3s_installed() {
 
 gather_additional_args() {
     local ADDITIONAL_ARGS=""
-    yes_or_no "Do you want to set additional arguments?"
+    yes_or_no "Do you want to set additional parameters?"
+    # shellcheck disable=SC2181
     if [[ $? -ne 0 ]]
     then
         return 0
     fi
 
     yes_or_no "Do you want to disable load balancer"
+    # shellcheck disable=SC2181
     if [[ $? -eq 0 ]]
     then
         ADDITIONAL_ARGS="$ADDITIONAL_ARGS --disable=servicelb"
     fi
     yes_or_no "Do you want to disable traefik"
+    # shellcheck disable=SC2181
     if [[ $? -eq 0 ]]
     then
         ADDITIONAL_ARGS="$ADDITIONAL_ARGS --disable=traefik"
     fi
     yes_or_no "Do you want to set TLS SAN?"
+    # shellcheck disable=SC2181
     if [[ $? -eq 0 ]]
     then
         local SAN
@@ -443,27 +657,28 @@ gather_master_params() {
 }
 
 install_k3s_initial_master() {
-    check_k3s_installed "$1"
     echo_message "Installing initial k3s master node..."
     local COMMAND
     COMMAND="curl -sfL https://get.k3s.io | sh -s - server  --cluster-init --flannel-backend wireguard-native $2"
     echo_message "Running command: $COMMAND"
     eval "$COMMAND"
     exit_if_error "Failed to install k3s"
+    return 0
+}
 
+show_k3s_token() {
     echo_message "Getting token..."
     local K3S_TOKEN
     K3S_TOKEN=$(sudo cat /var/lib/rancher/k3s/server/token)
     echo_message "K3S_TOKEN: $(magenta """$K3S_TOKEN""")"
     echo_message "Use it for joining agents and other master nodes to the cluster."
-    return 0
 }
 
 install_k3s_master() {
-    check_k3s_installed "$1"
     echo_message "Installing k3s master node..."
     local COMMAND
-    COMMAND="curl -sfL https://get.k3s.io | sh -s - server """$2""" --flannel-backend wireguard-native """$3""""
+    # shellcheck disable=SC2027
+    COMMAND="curl -sfL https://get.k3s.io | sh -s - server """$1""" --flannel-backend wireguard-native """$2""""
     echo_message "Running command: $COMMAND"
     eval "$COMMAND"
     exit_if_error "Failed to install k3s"
@@ -471,15 +686,54 @@ install_k3s_master() {
 }
 
 install_k3s_agent() {
-    check_k3s_installed "$1"
     echo_message "Installing k3s agent node..."
     local COMMAND
-    COMMAND="curl -sfL https://get.k3s.io | sh -s - agent """$2""" --flannel-backend wireguard-native """$3""""
+    # shellcheck disable=SC2027
+    COMMAND="curl -sfL https://get.k3s.io | sh -s - agent """$1""" --flannel-backend wireguard-native """$2""""
     echo_message "Running command: $COMMAND"
     eval "$COMMAND"
     exit_if_error "Failed to install k3s"
     return 0
-    return 0
+}
+
+start_k3s_master() {
+    echo_message "Starting k3s..."
+    sudo systemctl start k3s
+    exit_if_error "Failed to start k3s"
+}
+
+stop_k3s_master() {
+    echo_message "Stopping k3s..."
+    sudo systemctl stop k3s
+    exit_if_error "Failed to stop k3s"
+}
+
+start_k3s_agent() {
+    echo_message "Starting k3s agent..."
+    sudo systemctl start k3s-agent
+    exit_if_error "Failed to start k3s agent"
+}
+
+stop_k3s_agent() {
+    echo_message "Stopping k3s agent..."
+    sudo systemctl stop k3s-agent
+    exit_if_error "Failed to stop k3s agent"
+}
+
+killall_k3s() {
+    echo_message "Killing k3s..."
+    sudo /usr/local/bin/k3s-killall.sh
+    exit_if_error "Failed to kill k3s"
+}
+
+uninstall_k3s() {
+    yes_or_no "Do you want to uninstall k3s?"
+    if [[ $? -eq 0 ]]
+    then
+        echo_message "Uninstalling k3s..."
+        sudo /usr/local/bin/k3s-uninstall.sh
+        exit_if_error "Failed to uninstall k3s"
+    fi
 }
 
 # ./src/longhorn.sh
@@ -668,9 +922,6 @@ barekube_install_dependencies_command() {
   inspect_args
   echo_info "Installing dependencies..."
   update_packages
-  install_containerd
-  install_gvisor
-  register_gvisor_to_containerd
   install_wireguard
   echo_final "Failed to install dependencies." "Dependencies are installed succcessfully."
 
@@ -685,13 +936,15 @@ barekube_install_initial_master_command() {
   echo "# The code you write here will be wrapped by a function named 'barekube_install_kubernetes_initial_master_command()'."
   echo "# Feel free to edit this file; your changes will persist when regenerating."
   inspect_args
-  echo_info "Installing initial k3s master node..."
-
-  ADDITIONAL_ARGS=$(gather_additional_args)
-  echo_info "Installing master node..."
-  echo_info "Additional arguments: $ADDITIONAL_ARGS"
   # shellcheck disable=SC2154
-  install_k3s_initial_master "${args[--reinstall]}" "${ADDITIONAL_ARGS}"
+  check_k3s_installed "${args[--reinstall]}"
+  echo_info "Installing initial k3s master node..."
+  ADDITIONAL_ARGS=$(gather_additional_args)
+
+  install_k3s_initial_master "${ADDITIONAL_ARGS}"
+  install_gvisor
+  register_gvisor_to_k3s
+  show_k3s_token
   echo_final "Failed to install initial k3s master node." "Initial k3s master node installed successfully."
 
 }
@@ -705,13 +958,18 @@ barekube_install_master_node_command() {
   echo "# The code you write here will be wrapped by a function named 'barekube_install_master_command()'."
   echo "# Feel free to edit this file; your changes will persist when regenerating."
   inspect_args
+  # shellcheck disable=SC2154
+  check_k3s_installed "${args[--reinstall]}"
   MASTER_PARAMS=$(gather_master_params)
   ADDITIONAL_ARGS=$(gather_additional_args)
   echo_info "Installing master node..."
-  # shellcheck disable=SC2154
+
   echo_info "Master parameters: $MASTER_PARAMS"
   echo_info "Additional arguments: $ADDITIONAL_ARGS"
-  install_k3s_master "${args[--reinstall]}" "$MASTER_PARAMS" "$ADDITIONAL_ARGS"
+
+  install_k3s_master "$MASTER_PARAMS" "$ADDITIONAL_ARGS"
+  install_gvisor
+  register_gvisor_to_k3s
   echo_final "Failed to install k3s master node." "Another k3s master node installed successfully."
 
 }
@@ -725,21 +983,37 @@ barekube_install_agent_node_command() {
   echo "# The code you write here will be wrapped by a function named 'barekube_install_master_command()'."
   echo "# Feel free to edit this file; your changes will persist when regenerating."
   inspect_args
+  # shellcheck disable=SC2154
+  check_k3s_installed "${args[--reinstall]}"
   MASTER_PARAMS=$(gather_master_params)
   ADDITIONAL_ARGS=$(gather_additional_args)
   echo_info "Installing agent node..."
-  # shellcheck disable=SC2154
-  echo_info "Master parameters: $MASTER_PARAMS"
-  echo_info "Additional arguments: $ADDITIONAL_ARGS"
-  install_k3s_agent "${args[--reinstall]}" "$MASTER_PARAMS" "$ADDITIONAL_ARGS"
+
+  install_k3s_agent "$MASTER_PARAMS" "$ADDITIONAL_ARGS"
+  install_gvisor
+  register_gvisor_to_k3s
   echo_final "Failed to install k3s agent node." "Another k3s agent node installed successfully."
 
 }
 
 # :command.function
-barekube_longhorn_install_dependencies_command() {
+barekube_install_gvisor_command() {
 
-  # ./commands/longhorn/install-dependencies.sh
+  # ./commands/install/gvisor.sh
+  echo "# This file is located at './commands/install/gvisor.sh'."
+  echo "# It contains the implementation for the 'barekube install gvisor' command."
+  echo "# The code you write here will be wrapped by a function named 'barekube_install_gvisor_command()'."
+  echo "# Feel free to edit this file; your changes will persist when regenerating."
+  inspect_args
+  install_gvisor
+  register_gvisor_to_k3s
+
+}
+
+# :command.function
+barekube_install_longhorn_dependencies_command() {
+
+  # ./commands/install/longhorn-dependencies.sh
   echo "# This file is located at './commands/longhorn/install-dependencies.sh'."
   echo "# It contains the implementation for the 'barekube longhorn install-dependencies' command."
   echo "# The code you write here will be wrapped by a function named 'barekube_longhorn_install_dependencies_command()'."
@@ -751,6 +1025,97 @@ barekube_longhorn_install_dependencies_command() {
 
   echo_final "Failed to install longhorn dependencies." "Longhorn dependencies are installed succcessfully."
   echo_info "To fix multipath issue, please follow instructions: $(magenta """https://longhorn.io/kb/troubleshooting-volume-with-multipath/""")"
+
+}
+
+# :command.function
+barekube_k3s_start_command() {
+
+  # ./commands/k3s/start.sh
+  echo "# This file is located at './commands/k3s/start.sh'."
+  echo "# It contains the implementation for the 'barekube k3s start' command."
+  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_start_command()'."
+  echo "# Feel free to edit this file; your changes will persist when regenerating."
+  inspect_args
+  start_k3s_master
+
+}
+
+# :command.function
+barekube_k3s_stop_command() {
+
+  # ./commands/k3s/stop.sh
+  echo "# This file is located at './commands/k3s/stop.sh'."
+  echo "# It contains the implementation for the 'barekube k3s stop' command."
+  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_stop_command()'."
+  echo "# Feel free to edit this file; your changes will persist when regenerating."
+  inspect_args
+  stop_k3s_master
+
+}
+
+# :command.function
+barekube_k3s_uninstall_command() {
+
+  # ./commands/k3s/uninstall.sh
+  echo "# This file is located at './commands/k3s/uninstall.sh'."
+  echo "# It contains the implementation for the 'barekube k3s uninstall' command."
+  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_uninstall_command()'."
+  echo "# Feel free to edit this file; your changes will persist when regenerating."
+  inspect_args
+  uninstall_k3s
+
+}
+
+# :command.function
+barekube_k3s_killall_command() {
+
+  # ./commands/k3s/killall.sh
+  echo "# This file is located at './commands/k3s/killall.sh'."
+  echo "# It contains the implementation for the 'barekube k3s killall' command."
+  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_killall_command()'."
+  echo "# Feel free to edit this file; your changes will persist when regenerating."
+  inspect_args
+  killall_k3s
+
+}
+
+# :command.function
+barekube_k3s_start_agent_command() {
+
+  # ./commands/k3s/start-agent.sh
+  echo "# This file is located at './commands/k3s/start-agent.sh'."
+  echo "# It contains the implementation for the 'barekube k3s start-agent' command."
+  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_start_agent_command()'."
+  echo "# Feel free to edit this file; your changes will persist when regenerating."
+  inspect_args
+  start_k3s_agent
+
+}
+
+# :command.function
+barekube_k3s_stop_agent_command() {
+
+  # ./commands/k3s/stop-agent.sh
+  echo "# This file is located at './commands/k3s/stop-agent.sh'."
+  echo "# It contains the implementation for the 'barekube k3s stop-agent' command."
+  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_stop_agent_command()'."
+  echo "# Feel free to edit this file; your changes will persist when regenerating."
+  inspect_args
+  stop_k3s_agent
+
+}
+
+# :command.function
+barekube_upgrade_command() {
+
+  # ./commands/upgrade.sh
+  echo "# This file is located at './commands/upgrade.sh'."
+  echo "# It contains the implementation for the 'barekube upgrade' command."
+  echo "# The code you write here will be wrapped by a function named 'barekube_upgrade_command()'."
+  echo "# Feel free to edit this file; your changes will persist when regenerating."
+  inspect_args
+  upgrade_barekube
 
 }
 
@@ -791,10 +1156,17 @@ parse_requirements() {
       shift $#
       ;;
 
-    longhorn)
-      action="longhorn"
+    k3s)
+      action="k3s"
       shift
-      barekube_longhorn_parse_requirements "$@"
+      barekube_k3s_parse_requirements "$@"
+      shift $#
+      ;;
+
+    upgrade)
+      action="upgrade"
+      shift
+      barekube_upgrade_parse_requirements "$@"
       shift $#
       ;;
 
@@ -889,6 +1261,20 @@ barekube_install_parse_requirements() {
       action="agent-node"
       shift
       barekube_install_agent_node_parse_requirements "$@"
+      shift $#
+      ;;
+
+    gvisor)
+      action="gvisor"
+      shift
+      barekube_install_gvisor_parse_requirements "$@"
+      shift $#
+      ;;
+
+    longhorn-dependencies)
+      action="longhorn-dependencies"
+      shift
+      barekube_install_longhorn_dependencies_parse_requirements "$@"
       shift $#
       ;;
 
@@ -1130,14 +1516,104 @@ barekube_install_agent_node_parse_requirements() {
 }
 
 # :command.parse_requirements
-barekube_longhorn_parse_requirements() {
+barekube_install_gvisor_parse_requirements() {
   # :command.fixed_flags_filter
   while [[ $# -gt 0 ]]; do
     key="$1"
     case "$key" in
       --help | -h)
         long_usage=yes
-        barekube_longhorn_usage
+        barekube_install_gvisor_usage
+        exit
+        ;;
+
+      *)
+        break
+        ;;
+
+    esac
+  done
+
+  # :command.command_filter
+  action="install gvisor"
+
+  # :command.parse_requirements_while
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+
+      -?*)
+        printf "invalid option: %s\n" "$key" >&2
+        exit 1
+        ;;
+
+      *)
+        # :command.parse_requirements_case
+        # :command.parse_requirements_case_simple
+        printf "invalid argument: %s\n" "$key" >&2
+        exit 1
+
+        ;;
+
+    esac
+  done
+
+}
+
+# :command.parse_requirements
+barekube_install_longhorn_dependencies_parse_requirements() {
+  # :command.fixed_flags_filter
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      --help | -h)
+        long_usage=yes
+        barekube_install_longhorn_dependencies_usage
+        exit
+        ;;
+
+      *)
+        break
+        ;;
+
+    esac
+  done
+
+  # :command.command_filter
+  action="install longhorn-dependencies"
+
+  # :command.parse_requirements_while
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+
+      -?*)
+        printf "invalid option: %s\n" "$key" >&2
+        exit 1
+        ;;
+
+      *)
+        # :command.parse_requirements_case
+        # :command.parse_requirements_case_simple
+        printf "invalid argument: %s\n" "$key" >&2
+        exit 1
+
+        ;;
+
+    esac
+  done
+
+}
+
+# :command.parse_requirements
+barekube_k3s_parse_requirements() {
+  # :command.fixed_flags_filter
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      --help | -h)
+        long_usage=yes
+        barekube_k3s_usage
         exit
         ;;
 
@@ -1154,16 +1630,51 @@ barekube_longhorn_parse_requirements() {
   case $action in
     -*) ;;
 
-    install-dependencies)
-      action="install-dependencies"
+    start)
+      action="start"
       shift
-      barekube_longhorn_install_dependencies_parse_requirements "$@"
+      barekube_k3s_start_parse_requirements "$@"
+      shift $#
+      ;;
+
+    stop)
+      action="stop"
+      shift
+      barekube_k3s_stop_parse_requirements "$@"
+      shift $#
+      ;;
+
+    uninstall)
+      action="uninstall"
+      shift
+      barekube_k3s_uninstall_parse_requirements "$@"
+      shift $#
+      ;;
+
+    killall)
+      action="killall"
+      shift
+      barekube_k3s_killall_parse_requirements "$@"
+      shift $#
+      ;;
+
+    start-agent)
+      action="start-agent"
+      shift
+      barekube_k3s_start_agent_parse_requirements "$@"
+      shift $#
+      ;;
+
+    stop-agent)
+      action="stop-agent"
+      shift
+      barekube_k3s_stop_agent_parse_requirements "$@"
       shift $#
       ;;
 
     # :command.command_fallback
     "")
-      barekube_longhorn_usage >&2
+      barekube_k3s_usage >&2
       exit 1
       ;;
 
@@ -1198,14 +1709,14 @@ barekube_longhorn_parse_requirements() {
 }
 
 # :command.parse_requirements
-barekube_longhorn_install_dependencies_parse_requirements() {
+barekube_k3s_start_parse_requirements() {
   # :command.fixed_flags_filter
   while [[ $# -gt 0 ]]; do
     key="$1"
     case "$key" in
       --help | -h)
         long_usage=yes
-        barekube_longhorn_install_dependencies_usage
+        barekube_k3s_start_usage
         exit
         ;;
 
@@ -1217,12 +1728,303 @@ barekube_longhorn_install_dependencies_parse_requirements() {
   done
 
   # :command.command_filter
-  action="longhorn install-dependencies"
+  action="k3s start"
 
   # :command.parse_requirements_while
   while [[ $# -gt 0 ]]; do
     key="$1"
     case "$key" in
+
+      -?*)
+        printf "invalid option: %s\n" "$key" >&2
+        exit 1
+        ;;
+
+      *)
+        # :command.parse_requirements_case
+        # :command.parse_requirements_case_simple
+        printf "invalid argument: %s\n" "$key" >&2
+        exit 1
+
+        ;;
+
+    esac
+  done
+
+}
+
+# :command.parse_requirements
+barekube_k3s_stop_parse_requirements() {
+  # :command.fixed_flags_filter
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      --help | -h)
+        long_usage=yes
+        barekube_k3s_stop_usage
+        exit
+        ;;
+
+      *)
+        break
+        ;;
+
+    esac
+  done
+
+  # :command.command_filter
+  action="k3s stop"
+
+  # :command.parse_requirements_while
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+
+      -?*)
+        printf "invalid option: %s\n" "$key" >&2
+        exit 1
+        ;;
+
+      *)
+        # :command.parse_requirements_case
+        # :command.parse_requirements_case_simple
+        printf "invalid argument: %s\n" "$key" >&2
+        exit 1
+
+        ;;
+
+    esac
+  done
+
+}
+
+# :command.parse_requirements
+barekube_k3s_uninstall_parse_requirements() {
+  # :command.fixed_flags_filter
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      --help | -h)
+        long_usage=yes
+        barekube_k3s_uninstall_usage
+        exit
+        ;;
+
+      *)
+        break
+        ;;
+
+    esac
+  done
+
+  # :command.command_filter
+  action="k3s uninstall"
+
+  # :command.parse_requirements_while
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+
+      -?*)
+        printf "invalid option: %s\n" "$key" >&2
+        exit 1
+        ;;
+
+      *)
+        # :command.parse_requirements_case
+        # :command.parse_requirements_case_simple
+        printf "invalid argument: %s\n" "$key" >&2
+        exit 1
+
+        ;;
+
+    esac
+  done
+
+}
+
+# :command.parse_requirements
+barekube_k3s_killall_parse_requirements() {
+  # :command.fixed_flags_filter
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      --help | -h)
+        long_usage=yes
+        barekube_k3s_killall_usage
+        exit
+        ;;
+
+      *)
+        break
+        ;;
+
+    esac
+  done
+
+  # :command.command_filter
+  action="k3s killall"
+
+  # :command.parse_requirements_while
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+
+      -?*)
+        printf "invalid option: %s\n" "$key" >&2
+        exit 1
+        ;;
+
+      *)
+        # :command.parse_requirements_case
+        # :command.parse_requirements_case_simple
+        printf "invalid argument: %s\n" "$key" >&2
+        exit 1
+
+        ;;
+
+    esac
+  done
+
+}
+
+# :command.parse_requirements
+barekube_k3s_start_agent_parse_requirements() {
+  # :command.fixed_flags_filter
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      --help | -h)
+        long_usage=yes
+        barekube_k3s_start_agent_usage
+        exit
+        ;;
+
+      *)
+        break
+        ;;
+
+    esac
+  done
+
+  # :command.command_filter
+  action="k3s start-agent"
+
+  # :command.parse_requirements_while
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+
+      -?*)
+        printf "invalid option: %s\n" "$key" >&2
+        exit 1
+        ;;
+
+      *)
+        # :command.parse_requirements_case
+        # :command.parse_requirements_case_simple
+        printf "invalid argument: %s\n" "$key" >&2
+        exit 1
+
+        ;;
+
+    esac
+  done
+
+}
+
+# :command.parse_requirements
+barekube_k3s_stop_agent_parse_requirements() {
+  # :command.fixed_flags_filter
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      --help | -h)
+        long_usage=yes
+        barekube_k3s_stop_agent_usage
+        exit
+        ;;
+
+      *)
+        break
+        ;;
+
+    esac
+  done
+
+  # :command.command_filter
+  action="k3s stop-agent"
+
+  # :command.parse_requirements_while
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+
+      -?*)
+        printf "invalid option: %s\n" "$key" >&2
+        exit 1
+        ;;
+
+      *)
+        # :command.parse_requirements_case
+        # :command.parse_requirements_case_simple
+        printf "invalid argument: %s\n" "$key" >&2
+        exit 1
+
+        ;;
+
+    esac
+  done
+
+}
+
+# :command.parse_requirements
+barekube_upgrade_parse_requirements() {
+  # :command.fixed_flags_filter
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      --help | -h)
+        long_usage=yes
+        barekube_upgrade_usage
+        exit
+        ;;
+
+      *)
+        break
+        ;;
+
+    esac
+  done
+
+  # :command.dependencies_filter
+  missing_deps=
+  # :dependency.filter
+  if ! command -v wget >/dev/null 2>&1; then
+    printf "missing dependency: wget\n" >&2
+    missing_deps=1
+  else
+    deps['wget']="$(command -v wget | head -n1)"
+  fi
+
+  if [[ -n $missing_deps ]]; then
+    exit 1
+  fi
+
+  # :command.command_filter
+  action="upgrade"
+
+  # :command.parse_requirements_while
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case "$key" in
+      # :flag.case
+      --yes | -y)
+
+        # :flag.case_no_arg
+        args['--yes']=1
+        shift
+        ;;
 
       -?*)
         printf "invalid option: %s\n" "$key" >&2
@@ -1266,8 +2068,16 @@ run() {
     "install initial-master") barekube_install_initial_master_command ;;
     "install master-node") barekube_install_master_node_command ;;
     "install agent-node") barekube_install_agent_node_command ;;
-    "longhorn") barekube_longhorn_command ;;
-    "longhorn install-dependencies") barekube_longhorn_install_dependencies_command ;;
+    "install gvisor") barekube_install_gvisor_command ;;
+    "install longhorn-dependencies") barekube_install_longhorn_dependencies_command ;;
+    "k3s") barekube_k3s_command ;;
+    "k3s start") barekube_k3s_start_command ;;
+    "k3s stop") barekube_k3s_stop_command ;;
+    "k3s uninstall") barekube_k3s_uninstall_command ;;
+    "k3s killall") barekube_k3s_killall_command ;;
+    "k3s start-agent") barekube_k3s_start_agent_command ;;
+    "k3s stop-agent") barekube_k3s_stop_agent_command ;;
+    "upgrade") barekube_upgrade_command ;;
   esac
 }
 

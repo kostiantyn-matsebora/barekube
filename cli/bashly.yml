@@ -14,6 +14,7 @@ x_markdown_footer: |-
 commands:
 - name: install
   expose: true
+  help: Install and configure barekube and dependencies
   commands:
     - name: dependencies
       help: Install and configure barekube dependencies
@@ -35,20 +36,44 @@ commands:
       flags:
         - long: --reinstall
           help: Reinstall k3s
+    - name: gvisor
+      help: Install and configure gVisor for existing k3s node
+
+    - name: longhorn-dependencies
+      help: Install and configure Longhorn storage dependencies
+
+- name: k3s
+  expose: true
+  commands:
+    - name: start
+      help: Start k3s master node
+    - name: stop
+      help: Stop k3s master node
+    - name: uninstall
+      help: Uninstall k3s and all related containers
+    - name: killall
+      help: Kill k3s and all k3s related containers
+    - name: start-agent
+      help: Start k3s agent node
+    - name: stop-agent
+      help: Stop k3s agent node
+
+
   examples:
   - barekube install dependencies
   - barekube install initial-master --reinstall
   - barekube install master-node
   - barekube install agent-node --reinstall
 
-- name: longhorn
-  expose: true
-  commands:
-    - name: install-dependencies
-      help: Install and configure Longhorn storage dependencies
-  help: To fix multipathd issue, please visit https://longhorn.io/kb/troubleshooting-volume-with-multipath/
-  examples:
-  - barekube longhorn install-dependencies
+- name: upgrade
+  help: Upgrade barekube CLI to latest version
+  flags: 
+  - long: --yes
+    short: -y
+    help: |-
+      Automaticaly upgrades CLI into $HOME/bin directory.
+  dependencies:
+  - wget
 footer: |-
     MIT License: https://github.com/kostiantyn-matsebora/barekube/blob/master/LICENSE
     Copyright (c) 2025 Kostiantyn Matsebora

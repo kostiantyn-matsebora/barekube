@@ -5,8 +5,5 @@ echo "# Feel free to edit this file; your changes will persist when regenerating
 inspect_args
 echo_info "Installing dependencies..."
 update_packages
-install_containerd
-install_gvisor
-register_gvisor_to_containerd
 install_wireguard
 echo_final "Failed to install dependencies." "Dependencies are installed succcessfully."
