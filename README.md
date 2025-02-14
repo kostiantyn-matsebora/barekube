@@ -46,7 +46,7 @@ To install barekube CLI you simply must do the following steps:
 
   ```Bash
     mkdir -p $HOME/bin
-    wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/refs/heads/gvisor/cli/release/barekube -O $HOME/bin/barekube
+    wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/refs/heads/master/cli/release/barekube -O $HOME/bin/barekube
     chmod +x $HOME/bin/barekube
   ```
 
