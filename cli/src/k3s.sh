@@ -169,7 +169,7 @@ install_k3s_agent() {
     echo_message "Installing k3s agent node..."
     local COMMAND
     # shellcheck disable=SC2027
-    COMMAND="curl -sfL https://get.k3s.io | sh -s - agent """$1""" --flannel-backend wireguard-native """$2""""
+    COMMAND="curl -sfL https://get.k3s.io | sh -s - agent """$1""" "
     echo_message "Running command: $COMMAND"
     eval "$COMMAND"
     exit_if_error "Failed to install k3s"

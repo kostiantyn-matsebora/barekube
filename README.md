@@ -42,7 +42,7 @@ using YAML-based specifications like this:
 
 To install barekube CLI you simply must do the following steps:
 
-- Download barekube CLI script the destination directory, for instance `$HOME/bin`: 
+- Download barekube CLI script the destination directory, for instance `$HOME/bin`:
 
   ```Bash
     mkdir -p $HOME/bin
