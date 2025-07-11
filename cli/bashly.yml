@@ -1,7 +1,7 @@
 name: barekube
 extensible: true
 help: CLI that provides functionality for installing and configuring bare kubernetes based on k3s and gVisor.
-version: 0.1.0
+version: 0.2.0
 
 x_markdown_footer: |-
       # ISSUE TRACKER
@@ -58,6 +58,11 @@ commands:
     - name: stop-agent
       help: Stop k3s agent node
 
+- name: system
+  expose: true
+  commands: 
+    - name: enable-autoupdate
+      help: Enable automatic updates of system packages
 
   examples:
   - barekube install dependencies
