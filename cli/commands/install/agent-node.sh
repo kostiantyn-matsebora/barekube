@@ -5,10 +5,9 @@ echo "# Feel free to edit this file; your changes will persist when regenerating
 inspect_args
 # shellcheck disable=SC2154
 check_k3s_installed "${args[--reinstall]}"
-MASTER_PARAMS=$(gather_master_params)
+MASTER_PARAMS=$(gather_master_params) || exit 1
 echo_info "Installing agent node..."
 
 install_k3s_agent "$MASTER_PARAMS"
-install_gvisor
-register_gvisor_to_k3s
+setup_gvisor
 echo_final "Failed to install k3s agent node." "Another k3s agent node installed successfully."

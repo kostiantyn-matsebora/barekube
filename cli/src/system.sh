@@ -1,5 +1,13 @@
 #!/bin/bash
 
+update_packages() {
+    run_privileged "Updating packages..." "Failed to update packages" apt update
+}
+
+install_wireguard() {
+    run_privileged "Installing wireguard..." "Failed to install wireguard" apt install -y wireguard
+}
+
 enable_autoupdate() {
   echo_message "Enabling automatic updates of system packages..."
   sudo apt update

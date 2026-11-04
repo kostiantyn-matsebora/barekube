@@ -541,187 +541,172 @@ inspect_args() {
 # :command.user_lib
 # ./src/cli.sh
 #!/bin/bash
-#!/bin/bash
+
+BAREKUBE_RELEASE_URL="https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/cli/release/barekube"
+
+# Prints the directory to install into: $HOME/bin when automatic, otherwise asked.
+resolve_install_path() {
+  local DEFAULT_PATH="$HOME/bin" CHOSEN_PATH
+  if [[ "$(is_automatic_mode "$1")" == "0" ]]
+  then
+    echo "$DEFAULT_PATH"
+    return 0
+  fi
+  CHOSEN_PATH="$(read_input "Enter the path where workspace is installed ($DEFAULT_PATH as default): ")"
+  echo "${CHOSEN_PATH:-$DEFAULT_PATH}"
+}
 
 upgrade_barekube() {
-  AUTOMATIC_MODE=$(is_automatic_mode "$1")
-
+  local BAREKUBE_PATH
   echo_info "Upgrading barekube CLI $(barekube --version)"
-  local BAREKUBE_HOME_PATH="$HOME/bin"
-  local BAREKUBE_PATH="$BAREKUBE_HOME_PATH"
-  if [[ $AUTOMATIC_MODE != "0" ]]
-  then
-    BAREKUBE_PATH="$(question "Enter the path where workspace is installed ($BAREKUBE_HOME_PATH as default): ")"
-    if [ -z "$BAREKUBE_PATH" ]
-    then
-        BAREKUBE_PATH="$BAREKUBE_HOME_PATH"
-    fi
-  fi
+  BAREKUBE_PATH="$(resolve_install_path "$1")"
   echo_message "Upgrading barekube CLI at $BAREKUBE_PATH"
-  wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/cli/release/barekube -O "$BAREKUBE_PATH/barekube"
+  wget "$BAREKUBE_RELEASE_URL" -O "$BAREKUBE_PATH/barekube"
   chmod +x "$BAREKUBE_PATH/barekube"
   exit_if_error "Error upgrading barekube"
   echo_info "Barekube CLI is upgraded successfully to version $(barekube --version)"
 }
 
-# ./src/haproxy.sh
+# ./src/gvisor.sh
 #!/bin/bash
 
-install_haproxy() {
-  echo_message "Installing HAProxy..."
-  # Install HAProxy
-  sudo apt-get install -y haproxy keepalived
-  exit_if_error "Error installing HAProxy"
+GVISOR_KEY_URL="https://gvisor.dev/archive.key"
+GVISOR_KEYRING="/usr/share/keyrings/gvisor-archive-keyring.gpg"
+GVISOR_REPO_URL="https://storage.googleapis.com/gvisor/releases"
+GVISOR_APT_SOURCE="/etc/apt/sources.list.d/gvisor.list"
+K3S_CONTAINERD_DIR="/var/lib/rancher/k3s/agent/etc/containerd"
+
+install_gvisor_prerequisites() {
+    run_privileged "Installing gVisor dependencies..." "Failed to install gVisor dependencies" \
+        apt install -y apt-transport-https ca-certificates curl gnupg
 }
 
-# ./src/k3s.sh
-#!/bin/bash
-
-update_packages() {
-    echo_message "Updating packages..."
-    sudo apt update
-
-    exit_if_error "Failed to update packages"
-}
-
-install_containerd() {
-    echo_message "Installing containerd..."
-    sudo apt install -y containerd
-    exit_if_error "Failed to install containerd"
-}
-
-install_gvisor() {
-     echo_message "Installing gVisor dependencies..."
-     sudo apt install -y \
-        apt-transport-https \
-        ca-certificates \
-        curl \
-        gnupg
-
+add_gvisor_apt_key() {
     echo_message "Adding gVisor key..."
-    curl -fsSL https://gvisor.dev/archive.key | sudo gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | sudo tee /etc/apt/sources.list.d/gvisor.list > /dev/null
-
+    curl -fsSL "$GVISOR_KEY_URL" | sudo gpg --dearmor -o "$GVISOR_KEYRING"
     exit_if_error "Failed to add gVisor key"
+}
 
+add_gvisor_apt_repository() {
+    echo_message "Adding gVisor repository..."
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=$GVISOR_KEYRING] $GVISOR_REPO_URL release main" \
+        | sudo tee "$GVISOR_APT_SOURCE" > /dev/null
+    exit_if_error "Failed to add gVisor repository"
+}
+
+install_gvisor_package() {
     echo_message "Installing gVisor..."
     sudo apt-get update && sudo apt-get install -y runsc
-
     exit_if_error "Failed to install gVisor"
 }
 
-register_gvisor_to_k3s() {
-    echo_message "Checking containerd configuration..."
-    grep -q ".containerd.runtimes.runsc" /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
+install_gvisor() {
+    install_gvisor_prerequisites
+    add_gvisor_apt_key
+    add_gvisor_apt_repository
+    install_gvisor_package
+}
 
-    if [ $? -ne "0" ]
-    then
-    echo_message "Copying containerd config to template..."
-    cp /var/lib/rancher/k3s/agent/etc/containerd/config.toml /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
-
-    echo_info "Adding runsc runtime to containerd configuration..."
-sudo tee -a /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl <<EOF
+runsc_runtime_config() {
+    cat <<'EOF'
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
   runtime_type = "io.containerd.runsc.v1"
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc.options]
   TypeUrl = "io.containerd.runsc.v1.options"
   ConfigPath = "/etc/containerd/runsc.toml"
 EOF
+}
+
+register_gvisor_to_k3s() {
+    local CONFIG="$K3S_CONTAINERD_DIR/config.toml"
+    echo_message "Checking containerd configuration..."
+    grep -q ".containerd.runtimes.runsc" "$CONFIG.tmpl" && return 0
+
+    echo_message "Copying containerd config to template..."
+    cp "$CONFIG" "$CONFIG.tmpl"
+
+    echo_info "Adding runsc runtime to containerd configuration..."
+    runsc_runtime_config | sudo tee -a "$CONFIG.tmpl"
     exit_if_error "Failed to add runsc runtime to containerd configuration"
 
-    echo_message "Restarting k3s..."
-    sudo systemctl restart k3s
-    exit_if_error "Failed to register gVisor to k3s"
-    fi
-    return 0
+    run_privileged "Restarting k3s..." "Failed to register gVisor to k3s" systemctl restart k3s
 }
 
-install_wireguard() {
-    echo_message "Installing wireguard..."
-    sudo apt install -y wireguard
-    exit_if_error  "Failed to install wireguard"
+# Installs gVisor and wires it into k3s - the pair every node install needs.
+setup_gvisor() {
+    install_gvisor
+    register_gvisor_to_k3s
 }
+
+# ./src/haproxy.sh
+#!/bin/bash
+
+install_haproxy() {
+  run_privileged "Installing HAProxy..." "Error installing HAProxy" \
+    apt-get install -y haproxy keepalived
+}
+
+# ./src/k3s.sh
+#!/bin/bash
+
+K3S_INSTALL_URL="https://get.k3s.io"
+K3S_FLANNEL_BACKEND="wireguard-native"
 
 check_k3s_installed() {
     echo_message "Checking if k3s is already installed..."
-    check_if_command_exists "k3s"
-     # shellcheck disable=SC2181
-     if [[ $? -eq 0 ]]
-     then
-         echo_info "k3s is already installed."
-         if [[ "$1" -ne "1" ]]
-         then
-             exit 0
-         fi
-     fi
+    if check_if_command_exists "k3s"
+    then
+        echo_info "k3s is already installed."
+        if [[ "$1" -ne "1" ]]
+        then
+            exit 0
+        fi
+    fi
 }
 
 gather_additional_args() {
     local ADDITIONAL_ARGS=""
-    yes_or_no "Do you want to set additional parameters?"
-    # shellcheck disable=SC2181
-    if [[ $? -ne 0 ]]
-    then
-        return 0
-    fi
-
-    yes_or_no "Do you want to disable load balancer"
-    # shellcheck disable=SC2181
-    if [[ $? -eq 0 ]]
+    yes_or_no "Do you want to set additional parameters?" || return 0
+    if yes_or_no "Do you want to disable load balancer"
     then
         ADDITIONAL_ARGS="$ADDITIONAL_ARGS --disable=servicelb"
     fi
-    yes_or_no "Do you want to disable traefik"
-    # shellcheck disable=SC2181
-    if [[ $? -eq 0 ]]
+    if yes_or_no "Do you want to disable traefik"
     then
         ADDITIONAL_ARGS="$ADDITIONAL_ARGS --disable=traefik"
     fi
-    yes_or_no "Do you want to set TLS SAN?"
-    # shellcheck disable=SC2181
-    if [[ $? -eq 0 ]]
+    if yes_or_no "Do you want to set TLS SAN?"
     then
-        local SAN
-        SAN=$(read_input  "Enter the SAN:")
-        ADDITIONAL_ARGS="$ADDITIONAL_ARGS --tls-san $SAN"
+        ADDITIONAL_ARGS="$ADDITIONAL_ARGS --tls-san $(read_input "Enter the SAN:")"
     fi
-    yes_or_no "Do you want to add another additional arguments?"
-    if [[ $? -eq 0 ]]
+    if yes_or_no "Do you want to add another additional arguments?"
     then
-        ADDITIONAL_ARGS="$ADDITIONAL_ARGS $(read_input  "Enter the additional arguments:")"
+        ADDITIONAL_ARGS="$ADDITIONAL_ARGS $(read_input "Enter the additional arguments:")"
     fi
     echo "$ADDITIONAL_ARGS"
 }
 
 gather_master_params() {
-    local MASTER_PARAMS
-    local MASTER_URL
-    MASTER_URL=$(read_input "Enter the master URL(e.g. https://192.168.1.1:6443):")
-    if [[ -z "$MASTER_URL" ]]
-    then
-        echo_error "Master URL is required."
-        exit 1
-    fi
+    local MASTER_URL TOKEN
+    MASTER_URL=$(read_required_input "Enter the master URL(e.g. https://192.168.1.1:6443):" "Master URL is required.") || return 1
+    TOKEN=$(read_required_input "Enter the token:" "Token is required.") || return 1
+    echo " --server=$MASTER_URL --token=$TOKEN"
+}
 
-    MASTER_PARAMS="$MASTER_PARAMS --server=$MASTER_URL"
-    TOKEN=$(read_input  "Enter the token:")
-    if [[ -z "$TOKEN" ]]
-    then
-        echo_error "Token is required."
-        exit 1
-    fi
-    MASTER_PARAMS="$MASTER_PARAMS --token=$TOKEN"
-    echo "$MASTER_PARAMS"
+# Pipes the official k3s installer into sh. The arguments are split on
+# whitespace only - never evaluated - so input cannot inject shell syntax.
+run_k3s_installer() {
+    local -a INSTALLER_ARGS
+    read -ra INSTALLER_ARGS <<<"$*"
+    echo_message "Running command: curl -sfL $K3S_INSTALL_URL | sh -s - ${INSTALLER_ARGS[*]}"
+    curl -sfL "$K3S_INSTALL_URL" | sh -s - "${INSTALLER_ARGS[@]}"
+    exit_if_error "Failed to install k3s"
+    return 0
 }
 
 install_k3s_initial_master() {
     echo_message "Installing initial k3s master node..."
-    local COMMAND
-    COMMAND="curl -sfL https://get.k3s.io | sh -s - server  --cluster-init --flannel-backend wireguard-native $2"
-    echo_message "Running command: $COMMAND"
-    eval "$COMMAND"
-    exit_if_error "Failed to install k3s"
-    return 0
+    run_k3s_installer server --cluster-init --flannel-backend "$K3S_FLANNEL_BACKEND" "$1"
 }
 
 show_k3s_token() {
@@ -734,75 +719,52 @@ show_k3s_token() {
 
 install_k3s_master() {
     echo_message "Installing k3s master node..."
-    local COMMAND
-    # shellcheck disable=SC2027
-    COMMAND="curl -sfL https://get.k3s.io | sh -s - server """$1""" --flannel-backend wireguard-native """$2""""
-    echo_message "Running command: $COMMAND"
-    eval "$COMMAND"
-    exit_if_error "Failed to install k3s"
-    return 0
+    run_k3s_installer server "$1" --flannel-backend "$K3S_FLANNEL_BACKEND" "$2"
 }
 
 install_k3s_agent() {
     echo_message "Installing k3s agent node..."
-    local COMMAND
-    # shellcheck disable=SC2027
-    COMMAND="curl -sfL https://get.k3s.io | sh -s - agent """$1""" "
-    echo_message "Running command: $COMMAND"
-    eval "$COMMAND"
-    exit_if_error "Failed to install k3s"
-    return 0
+    run_k3s_installer agent "$1"
 }
 
 start_k3s_master() {
-    echo_message "Starting k3s..."
-    sudo systemctl start k3s
-    exit_if_error "Failed to start k3s"
+    run_privileged "Starting k3s..." "Failed to start k3s" systemctl start k3s
 }
 
 stop_k3s_master() {
-    echo_message "Stopping k3s..."
-    sudo systemctl stop k3s
-    exit_if_error "Failed to stop k3s"
+    run_privileged "Stopping k3s..." "Failed to stop k3s" systemctl stop k3s
 }
 
 start_k3s_agent() {
-    echo_message "Starting k3s agent..."
-    sudo systemctl start k3s-agent
-    exit_if_error "Failed to start k3s agent"
+    run_privileged "Starting k3s agent..." "Failed to start k3s agent" systemctl start k3s-agent
 }
 
 stop_k3s_agent() {
-    echo_message "Stopping k3s agent..."
-    sudo systemctl stop k3s-agent
-    exit_if_error "Failed to stop k3s agent"
+    run_privileged "Stopping k3s agent..." "Failed to stop k3s agent" systemctl stop k3s-agent
 }
 
 killall_k3s() {
-    echo_message "Killing k3s..."
-    sudo /usr/local/bin/k3s-killall.sh
-    exit_if_error "Failed to kill k3s"
+    run_privileged "Killing k3s..." "Failed to kill k3s" /usr/local/bin/k3s-killall.sh
 }
 
 uninstall_k3s() {
-    yes_or_no "Do you want to uninstall k3s?"
-    if [[ $? -eq 0 ]]
+    if yes_or_no "Do you want to uninstall k3s?"
     then
-        echo_message "Uninstalling k3s..."
-        sudo /usr/local/bin/k3s-uninstall.sh
-        exit_if_error "Failed to uninstall k3s"
+        run_privileged "Uninstalling k3s..." "Failed to uninstall k3s" /usr/local/bin/k3s-uninstall.sh
     fi
 }
 
 # ./src/longhorn.sh
 #!/bin/bash
+LONGHORN_PACKAGES=(open-iscsi bash curl grep nfs-common)
+
 install_longhorn_dependencies() {
-    echo_message "Updating packages..." && sudo apt update
-    echo_message "Installing open-iscsi..." && sudo apt install -y open-iscsi
-    echo_message "Installing bash..." && sudo apt install -y bash
-    echo_message "Installing curl..." && sudo apt install -y curl
-    echo_message "Installing grep..." && sudo apt install -y grep
-    echo_message "Installing nfs-common..." && sudo apt install -y nfs-common
+    local PACKAGE
+    echo_message "Updating packages..." && sudo apt update || return 1
+    for PACKAGE in "${LONGHORN_PACKAGES[@]}"
+    do
+        echo_message "Installing $PACKAGE..." && sudo apt install -y "$PACKAGE" || return 1
+    done
     return 0
 }
 
@@ -845,75 +807,80 @@ timestamp() {
   date +%F_%T # current date and time
 }
 
-green() {
-    echo -e "\033[0;32m$1\033[0m"
-}
-
-yellow_bold() {
-    echo -e "\033[1;33m$1\033[0m"
-}
-
-red() {
-    echo -e "\033[0;31m$1\033[0m"
-}
-
-green_bold() {
-    echo -e "\033[1;92m$1\033[0m"
-}
-
-magenta() {
-    echo -e "\033[0;35m$1\033[0m"
+# Prints "[timestamp] MESSAGE" in the colour given by a colors.sh function.
+log_line() {
+    local COLOR="$1"
+    echo -e "$("$COLOR" "[$(timestamp)] $2\n")"
 }
 
 echo_message(){
-    echo -e "$(green "[$(timestamp)] $1\n")"
+    log_line green "$1"
 }
 
 echo_info(){
-    echo -e "$(yellow_bold "[$(timestamp)] $1\n")"
-
-}
-
-echo_important(){
-    echo -e "$(magenta "[$(timestamp)] $1\n")"
-
+    log_line yellow_bold "$1"
 }
 
 echo_error(){
-    echo -e "$(red "[$(timestamp)] $1\n")"
+    log_line red "$1"
+}
+
+function prompt_message(){
+    green_bold "[$(timestamp)] $1\n"
+}
+
+function remove_whitespace(){
+    echo "${1//[$'\t\r\n ']}"
 }
 
 function question(){
-    local MESSAGE
-    MESSAGE=$(green_bold "[$(timestamp)] $1\n")
-
-    read -sn 1 -r -p "$MESSAGE" ANSWER
-    # shellcheck disable=SC2028
-    echo  "${ANSWER//[$'\t\r\n ']}"
+    local ANSWER
+    read -sn 1 -r -p "$(prompt_message "$1")" ANSWER
+    remove_whitespace "$ANSWER"
 }
 
 function read_input(){
-    local MESSAGE
-    MESSAGE=$(green_bold "[$(timestamp)] $1\n")
+    local ANSWER
+    read -r -p "$(prompt_message "$1")" ANSWER
+    remove_whitespace "$ANSWER"
+}
 
-    read -r -p "$MESSAGE" ANSWER
-    # shellcheck disable=SC2028
-    echo  "${ANSWER//[$'\t\r\n ']}"
+# Reads a value; reports ERROR_MESSAGE on stderr and fails when empty.
+function read_required_input(){
+    local VALUE
+    VALUE=$(read_input "$1")
+    if [[ -z "$VALUE" ]]
+    then
+        echo_error "$2" >&2
+        return 1
+    fi
+    echo "$VALUE"
+}
+
+# Runs "sudo COMMAND..." announcing PROGRESS and stopping with FAILURE on error.
+function run_privileged(){
+    local PROGRESS="$1" FAILURE="$2"
+    shift 2
+    echo_message "$PROGRESS"
+    sudo "$@"
+    exit_if_error "$FAILURE"
 }
 
 function exit_if_error(){
-    if [ "$?" -ne "0" ]
+    local STATUS=$?
+    if [ "$STATUS" -ne "0" ]
     then
         echo_error "$1"
-        exit $?
+        exit "$STATUS"
     fi
 }
 
 function echo_final(){
-    if [ "$?" -ne "0" ]
+    local STATUS=$?
+    if [ "$STATUS" -ne "0" ]
     then
         echo_error "$1"
-        exit $?
+        exit "$STATUS"
     else
 
         echo_info "$2"
@@ -928,20 +895,7 @@ function yes_or_no(){
 
     local ANSWER
     ANSWER=$(question "$1 [y/n]")
-    if [[ "$ANSWER" = "y" || "$ANSWER" = "Y" ]]
-    then
-        return 0
-    else
-        return 1
-    fi
-}
-
-function exit_if_answer_no() {
-    if [[ $? -ne 0 ]]
-    then
-        echo_message "Exiting..."
-        exit 0
-    fi
+    [[ "$ANSWER" == [yY] ]]
 }
 
 function is_automatic_mode(){
@@ -953,22 +907,20 @@ function is_automatic_mode(){
     fi
 }
 
-function press_any_key(){
-    read -n 1 -s -r -p "Press any key to continue..."
-}
-
 function check_if_command_exists(){
     command -v "$1" &> /dev/null
-    if [ $? -ne 0 ]
-    then
-        return 1
-    else
-        return 0
-    fi
 }
 
 # ./src/system.sh
 #!/bin/bash
+
+update_packages() {
+    run_privileged "Updating packages..." "Failed to update packages" apt update
+}
+
+install_wireguard() {
+    run_privileged "Installing wireguard..." "Failed to install wireguard" apt install -y wireguard
+}
 
 enable_autoupdate() {
   echo_message "Enabling automatic updates of system packages..."
@@ -1012,8 +964,7 @@ barekube_install_initial_master_command() {
   ADDITIONAL_ARGS=$(gather_additional_args)
 
   install_k3s_initial_master "${ADDITIONAL_ARGS}"
-  install_gvisor
-  register_gvisor_to_k3s
+  setup_gvisor
   show_k3s_token
   echo_final "Failed to install initial k3s master node." "Initial k3s master node installed successfully."
 
@@ -1030,7 +981,7 @@ barekube_install_master_node_command() {
   inspect_args
   # shellcheck disable=SC2154
   check_k3s_installed "${args[--reinstall]}"
-  MASTER_PARAMS=$(gather_master_params)
+  MASTER_PARAMS=$(gather_master_params) || exit 1
   ADDITIONAL_ARGS=$(gather_additional_args)
   echo_info "Installing master node..."
 
@@ -1038,8 +989,7 @@ barekube_install_master_node_command() {
   echo_info "Additional arguments: $ADDITIONAL_ARGS"
 
   install_k3s_master "$MASTER_PARAMS" "$ADDITIONAL_ARGS"
-  install_gvisor
-  register_gvisor_to_k3s
+  setup_gvisor
   echo_final "Failed to install k3s master node." "Another k3s master node installed successfully."
 
 }
@@ -1055,12 +1005,11 @@ barekube_install_agent_node_command() {
   inspect_args
   # shellcheck disable=SC2154
   check_k3s_installed "${args[--reinstall]}"
-  MASTER_PARAMS=$(gather_master_params)
+  MASTER_PARAMS=$(gather_master_params) || exit 1
   echo_info "Installing agent node..."
 
   install_k3s_agent "$MASTER_PARAMS"
-  install_gvisor
-  register_gvisor_to_k3s
+  setup_gvisor
   echo_final "Failed to install k3s agent node." "Another k3s agent node installed successfully."
 
 }
@@ -1074,8 +1023,7 @@ barekube_install_gvisor_command() {
   echo "# The code you write here will be wrapped by a function named 'barekube_install_gvisor_command()'."
   echo "# Feel free to edit this file; your changes will persist when regenerating."
   inspect_args
-  install_gvisor
-  register_gvisor_to_k3s
+  setup_gvisor
 
 }
 
@@ -1197,7 +1145,8 @@ barekube_upgrade_command() {
   echo "# The code you write here will be wrapped by a function named 'barekube_upgrade_command()'."
   echo "# Feel free to edit this file; your changes will persist when regenerating."
   inspect_args
-  upgrade_barekube
+  # shellcheck disable=SC2154
+  upgrade_barekube "${args[--yes]:+--yes}"
 
 }
 

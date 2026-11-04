@@ -1,10 +1,12 @@
 #!/bin/bash
+LONGHORN_PACKAGES=(open-iscsi bash curl grep nfs-common)
+
 install_longhorn_dependencies() {
-    echo_message "Updating packages..." && sudo apt update
-    echo_message "Installing open-iscsi..." && sudo apt install -y open-iscsi
-    echo_message "Installing bash..." && sudo apt install -y bash
-    echo_message "Installing curl..." && sudo apt install -y curl
-    echo_message "Installing grep..." && sudo apt install -y grep
-    echo_message "Installing nfs-common..." && sudo apt install -y nfs-common
+    local PACKAGE
+    echo_message "Updating packages..." && sudo apt update || return 1
+    for PACKAGE in "${LONGHORN_PACKAGES[@]}"
+    do
+        echo_message "Installing $PACKAGE..." && sudo apt install -y "$PACKAGE" || return 1
+    done
     return 0
 }

@@ -5,7 +5,7 @@ echo "# Feel free to edit this file; your changes will persist when regenerating
 inspect_args
 # shellcheck disable=SC2154
 check_k3s_installed "${args[--reinstall]}"
-MASTER_PARAMS=$(gather_master_params)
+MASTER_PARAMS=$(gather_master_params) || exit 1
 ADDITIONAL_ARGS=$(gather_additional_args)
 echo_info "Installing master node..."
 
@@ -13,6 +13,5 @@ echo_info "Master parameters: $MASTER_PARAMS"
 echo_info "Additional arguments: $ADDITIONAL_ARGS"
 
 install_k3s_master "$MASTER_PARAMS" "$ADDITIONAL_ARGS"
-install_gvisor
-register_gvisor_to_k3s
+setup_gvisor
 echo_final "Failed to install k3s master node." "Another k3s master node installed successfully."

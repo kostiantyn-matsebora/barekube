@@ -10,7 +10,6 @@ ADDITIONAL_ARGS=$(gather_additional_args)
 
 
 install_k3s_initial_master "${ADDITIONAL_ARGS}"
-install_gvisor
-register_gvisor_to_k3s
+setup_gvisor
 show_k3s_token
 echo_final "Failed to install initial k3s master node." "Initial k3s master node installed successfully."
