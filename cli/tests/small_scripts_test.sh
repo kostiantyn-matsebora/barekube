@@ -41,8 +41,8 @@ test_install_longhorn_dependencies_installs_all_packages_in_order() {
     "sudo apt install -y nfs-common"
 }
 
-known_bug_install_longhorn_dependencies_reports_failure() {
-  # The function always ends with `return 0`, hiding failed apt calls.
+test_install_longhorn_dependencies_reports_failure() {
+  # Regression: the function once always ended with `return 0`, hiding failures.
   mock_fail sudo 'apt install -y open-iscsi'
   run install_longhorn_dependencies
   [[ "$status" -ne 0 ]] || fail "failed install reported as success"
@@ -80,19 +80,19 @@ test_upgrade_barekube_short_flag_is_automatic_too() {
   run upgrade_barekube -y
   assert_status 0
   assert_called "chmod +x $HOME/bin/barekube"
-  refute_called_matching '^question'
+  refute_called_matching '^read_input'
 }
 
 test_upgrade_barekube_interactive_mode_defaults_to_home_bin() {
-  script_fn question ""
+  script_fn read_input ""
   run upgrade_barekube
   assert_status 0
-  assert_called "question Enter the path where workspace is installed ($HOME/bin as default): "
+  assert_called "read_input Enter the path where workspace is installed ($HOME/bin as default): "
   assert_called "chmod +x $HOME/bin/barekube"
 }
 
 test_upgrade_barekube_interactive_mode_uses_the_entered_path() {
-  script_fn question /opt/tools
+  script_fn read_input /opt/tools
   run upgrade_barekube
   assert_status 0
   assert_called "wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/cli/release/barekube -O /opt/tools/barekube"
@@ -106,11 +106,9 @@ test_upgrade_barekube_reports_failure() {
   refute_output_contains "upgraded successfully"
 }
 
-known_bug_upgrade_barekube_accepts_a_multi_character_path() {
-  # `question` reads a single key (read -n 1), so only the first character of
-  # a typed path is used.
+test_upgrade_barekube_accepts_a_multi_character_path() {
+  # Regression: the prompt once used `question`, which reads a single key.
   upgrade_from_stdin() { upgrade_barekube <<<"/opt/tools"; }
-  unset -f question
   run upgrade_from_stdin
   assert_called "chmod +x /opt/tools/barekube"
 }

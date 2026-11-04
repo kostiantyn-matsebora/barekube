@@ -139,6 +139,33 @@ test_k3s_uninstall() { check_delegate barekube_k3s_uninstall_command uninstall_k
 test_system_enable_autoupdate() { check_delegate barekube_system_enable_autoupdate_command enable_autoupdate; }
 test_upgrade() { check_delegate barekube_upgrade_command upgrade_barekube; }
 
+test_upgrade_forwards_the_yes_flag() {
+  args[--yes]=1
+  run barekube_upgrade_command
+  assert_called "upgrade_barekube --yes"
+}
+
+test_upgrade_without_yes_forwards_nothing() {
+  run barekube_upgrade_command
+  assert_called "upgrade_barekube "
+}
+
+# A failed parameter prompt (gather_master_params returns 1) must stop the install.
+check_aborts_on_missing_params() {
+  mock_fail gather_master_params
+  run "$1"
+  assert_status 1
+  refute_called_matching '^install_'
+}
+
+test_master_node_aborts_when_master_params_are_missing() {
+  check_aborts_on_missing_params barekube_install_master_node_command
+}
+
+test_agent_node_aborts_when_master_params_are_missing() {
+  check_aborts_on_missing_params barekube_install_agent_node_command
+}
+
 test_every_command_prints_its_banner_before_running() {
   run barekube_k3s_start_command
   assert_output_contains "# It contains the implementation for the 'barekube k3s start' command."

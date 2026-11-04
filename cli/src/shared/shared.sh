@@ -59,18 +59,20 @@ function read_input(){
 }
 
 function exit_if_error(){
-    if [ "$?" -ne "0" ]
+    local STATUS=$?
+    if [ "$STATUS" -ne "0" ]
     then
         echo_error "$1"
-        exit $?
+        exit "$STATUS"
     fi
 }
 
 function echo_final(){
-    if [ "$?" -ne "0" ]
+    local STATUS=$?
+    if [ "$STATUS" -ne "0" ]
     then
         echo_error "$1"
-        exit $?
+        exit "$STATUS"
     else 
         echo_info "$2"
     fi

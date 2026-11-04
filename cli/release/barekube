@@ -551,7 +551,7 @@ upgrade_barekube() {
   local BAREKUBE_PATH="$BAREKUBE_HOME_PATH"
   if [[ $AUTOMATIC_MODE != "0" ]]
   then
-    BAREKUBE_PATH="$(question "Enter the path where workspace is installed ($BAREKUBE_HOME_PATH as default): ")"
+    BAREKUBE_PATH="$(read_input "Enter the path where workspace is installed ($BAREKUBE_HOME_PATH as default): ")"
     if [ -z "$BAREKUBE_PATH" ]
     then
         BAREKUBE_PATH="$BAREKUBE_HOME_PATH"
@@ -699,16 +699,16 @@ gather_master_params() {
     MASTER_URL=$(read_input "Enter the master URL(e.g. https://192.168.1.1:6443):")
     if [[ -z "$MASTER_URL" ]]
     then
-        echo_error "Master URL is required."
-        exit 1
+        echo_error "Master URL is required." >&2
+        return 1
     fi
 
     MASTER_PARAMS="$MASTER_PARAMS --server=$MASTER_URL"
     TOKEN=$(read_input  "Enter the token:")
     if [[ -z "$TOKEN" ]]
     then
-        echo_error "Token is required."
-        exit 1
+        echo_error "Token is required." >&2
+        return 1
     fi
     MASTER_PARAMS="$MASTER_PARAMS --token=$TOKEN"
     echo "$MASTER_PARAMS"
@@ -717,7 +717,7 @@ gather_master_params() {
 install_k3s_initial_master() {
     echo_message "Installing initial k3s master node..."
     local COMMAND
-    COMMAND="curl -sfL https://get.k3s.io | sh -s - server  --cluster-init --flannel-backend wireguard-native $2"
+    COMMAND="curl -sfL https://get.k3s.io | sh -s - server  --cluster-init --flannel-backend wireguard-native $1"
     echo_message "Running command: $COMMAND"
     eval "$COMMAND"
     exit_if_error "Failed to install k3s"
@@ -797,12 +797,12 @@ uninstall_k3s() {
 # ./src/longhorn.sh
 #!/bin/bash
 install_longhorn_dependencies() {
-    echo_message "Updating packages..." && sudo apt update
-    echo_message "Installing open-iscsi..." && sudo apt install -y open-iscsi
-    echo_message "Installing bash..." && sudo apt install -y bash
-    echo_message "Installing curl..." && sudo apt install -y curl
-    echo_message "Installing grep..." && sudo apt install -y grep
-    echo_message "Installing nfs-common..." && sudo apt install -y nfs-common
+    echo_message "Updating packages..." && sudo apt update || return 1
+    echo_message "Installing open-iscsi..." && sudo apt install -y open-iscsi || return 1
+    echo_message "Installing bash..." && sudo apt install -y bash || return 1
+    echo_message "Installing curl..." && sudo apt install -y curl || return 1
+    echo_message "Installing grep..." && sudo apt install -y grep || return 1
+    echo_message "Installing nfs-common..." && sudo apt install -y nfs-common || return 1
     return 0
 }
 
@@ -902,18 +902,20 @@ function read_input(){
 }
 
 function exit_if_error(){
-    if [ "$?" -ne "0" ]
+    local STATUS=$?
+    if [ "$STATUS" -ne "0" ]
     then
         echo_error "$1"
-        exit $?
+        exit "$STATUS"
     fi
 }
 
 function echo_final(){
-    if [ "$?" -ne "0" ]
+    local STATUS=$?
+    if [ "$STATUS" -ne "0" ]
     then
         echo_error "$1"
-        exit $?
+        exit "$STATUS"
     else
 
         echo_info "$2"
@@ -1030,7 +1032,7 @@ barekube_install_master_node_command() {
   inspect_args
   # shellcheck disable=SC2154
   check_k3s_installed "${args[--reinstall]}"
-  MASTER_PARAMS=$(gather_master_params)
+  MASTER_PARAMS=$(gather_master_params) || exit 1
   ADDITIONAL_ARGS=$(gather_additional_args)
   echo_info "Installing master node..."
 
@@ -1055,7 +1057,7 @@ barekube_install_agent_node_command() {
   inspect_args
   # shellcheck disable=SC2154
   check_k3s_installed "${args[--reinstall]}"
-  MASTER_PARAMS=$(gather_master_params)
+  MASTER_PARAMS=$(gather_master_params) || exit 1
   echo_info "Installing agent node..."
 
   install_k3s_agent "$MASTER_PARAMS"
@@ -1197,7 +1199,8 @@ barekube_upgrade_command() {
   echo "# The code you write here will be wrapped by a function named 'barekube_upgrade_command()'."
   echo "# Feel free to edit this file; your changes will persist when regenerating."
   inspect_args
-  upgrade_barekube
+  # shellcheck disable=SC2154
+  upgrade_barekube "${args[--yes]:+--yes}"
 
 }
 

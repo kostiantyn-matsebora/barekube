@@ -9,7 +9,7 @@ upgrade_barekube() {
   local BAREKUBE_PATH="$BAREKUBE_HOME_PATH"
   if [[ $AUTOMATIC_MODE != "0" ]]
   then
-    BAREKUBE_PATH="$(question "Enter the path where workspace is installed ($BAREKUBE_HOME_PATH as default): ")"
+    BAREKUBE_PATH="$(read_input "Enter the path where workspace is installed ($BAREKUBE_HOME_PATH as default): ")"
     if [ -z "$BAREKUBE_PATH" ]
     then
         BAREKUBE_PATH="$BAREKUBE_HOME_PATH"

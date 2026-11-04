@@ -251,10 +251,9 @@ test_install_master_node_reports_a_missing_master_url() {
   assert_output_contains "Master URL is required."
 }
 
-known_bug_install_master_node_aborts_without_a_master_url() {
-  # gather_master_params calls `exit 1` inside $(...), which only leaves the
-  # command substitution: the error text is spliced into the k3s install
-  # command and the installer carries on.
+test_install_master_node_aborts_without_a_master_url() {
+  # Regression: gather_master_params exited inside $(...), which only left the
+  # substitution, so the error text was spliced into the k3s install command.
   run_input $'\n' barekube_cli install master-node --reinstall
   [[ "$status" -ne 0 ]] || fail "exit status was 0"
   refute_called_matching '^sh '
@@ -285,9 +284,9 @@ test_upgrade_short_flag_is_accepted() {
   assert_status 0
 }
 
-known_bug_upgrade_yes_flag_skips_the_path_prompt() {
-  # The upgrade command calls upgrade_barekube without forwarding --yes, so
-  # automatic mode never engages and the user is still prompted.
+test_upgrade_yes_flag_skips_the_path_prompt() {
+  # Regression: the upgrade command did not forward --yes, so the user was
+  # still prompted for a path.
   run_input "/opt" barekube_cli upgrade --yes
   assert_status 0
   assert_called "wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/cli/release/barekube -O $HOME/bin/barekube"

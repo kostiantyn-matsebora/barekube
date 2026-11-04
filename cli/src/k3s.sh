@@ -122,15 +122,15 @@ gather_master_params() {
     MASTER_URL=$(read_input "Enter the master URL(e.g. https://192.168.1.1:6443):")
     if [[ -z "$MASTER_URL" ]]
     then
-        echo_error "Master URL is required."
-        exit 1
+        echo_error "Master URL is required." >&2
+        return 1
     fi    
     MASTER_PARAMS="$MASTER_PARAMS --server=$MASTER_URL"
     TOKEN=$(read_input  "Enter the token:")
     if [[ -z "$TOKEN" ]]
     then
-        echo_error "Token is required."
-        exit 1
+        echo_error "Token is required." >&2
+        return 1
     fi
     MASTER_PARAMS="$MASTER_PARAMS --token=$TOKEN"
     echo "$MASTER_PARAMS"
@@ -139,7 +139,7 @@ gather_master_params() {
 install_k3s_initial_master() {
     echo_message "Installing initial k3s master node..."
     local COMMAND
-    COMMAND="curl -sfL https://get.k3s.io | sh -s - server  --cluster-init --flannel-backend wireguard-native $2"
+    COMMAND="curl -sfL https://get.k3s.io | sh -s - server  --cluster-init --flannel-backend wireguard-native $1"
     echo_message "Running command: $COMMAND"
     eval "$COMMAND"
     exit_if_error "Failed to install k3s"

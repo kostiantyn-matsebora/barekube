@@ -236,9 +236,9 @@ test_install_k3s_initial_master_reports_failure() {
   assert_output_contains "Failed to install k3s"
 }
 
-known_bug_install_k3s_initial_master_forwards_additional_arguments() {
-  # The function reads its extra arguments from $2, but the command passes
-  # them as $1, so --disable/--tls-san choices are silently dropped.
+test_install_k3s_initial_master_forwards_additional_arguments() {
+  # Regression: the extra arguments were read from $2 while the command passes
+  # them as $1, so --disable/--tls-san choices were silently dropped.
   run install_k3s_initial_master "--disable=traefik"
   assert_called "sh -s - server --cluster-init --flannel-backend wireguard-native --disable=traefik"
 }

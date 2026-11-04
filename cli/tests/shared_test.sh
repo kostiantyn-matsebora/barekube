@@ -90,9 +90,8 @@ test_exit_if_error_reports_and_stops_after_failure() {
   refute_output_contains "continued"
 }
 
-known_bug_exit_if_error_propagates_a_failure_status() {
-  # `exit $?` runs after echo_error, so $? is echo_error's 0 - the CLI reports
-  # success to the shell after a failed step.
+test_exit_if_error_propagates_a_failure_status() {
+  # Regression: `exit $?` ran after echo_error, so a failed step exited 0.
   run after_failure exit_if_error "boom"
   [[ "$status" -ne 0 ]] || fail "exit status was 0"
 }
@@ -112,7 +111,7 @@ test_echo_final_prints_error_and_stops_after_failure() {
   refute_output_contains "continued"
 }
 
-known_bug_echo_final_propagates_a_failure_status() {
+test_echo_final_propagates_a_failure_status() {
   run after_failure echo_final "failed msg" "all good"
   [[ "$status" -ne 0 ]] || fail "exit status was 0"
 }
