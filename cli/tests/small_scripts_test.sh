@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests for src/haproxy.sh, src/longhorn.sh, src/system.sh and src/cli.sh.
 source "$(dirname "${BASH_SOURCE[0]}")/lib/testing.sh"
+source "$CLI_DIR/src/shared/colors.sh"
 source "$CLI_DIR/src/shared/shared.sh"
 source "$CLI_DIR/src/haproxy.sh"
 source "$CLI_DIR/src/longhorn.sh"
@@ -49,6 +50,31 @@ test_install_longhorn_dependencies_reports_failure() {
 }
 
 # ------------------------------------------------------------------- system
+
+test_update_packages_runs_apt_update() {
+  run update_packages
+  assert_status 0
+  assert_calls "sudo apt update"
+  assert_output_contains "Updating packages..."
+}
+
+test_update_packages_reports_failure() {
+  mock_fail sudo
+  run update_packages
+  assert_output_contains "Failed to update packages"
+}
+
+test_install_wireguard_installs_the_package() {
+  run install_wireguard
+  assert_status 0
+  assert_calls "sudo apt install -y wireguard"
+}
+
+test_install_wireguard_reports_failure() {
+  mock_fail sudo
+  run install_wireguard
+  assert_output_contains "Failed to install wireguard"
+}
 
 test_enable_autoupdate_installs_configures_and_opens_the_config() {
   run enable_autoupdate

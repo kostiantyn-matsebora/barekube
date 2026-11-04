@@ -13,6 +13,5 @@ echo_info "Master parameters: $MASTER_PARAMS"
 echo_info "Additional arguments: $ADDITIONAL_ARGS"
 
 install_k3s_master "$MASTER_PARAMS" "$ADDITIONAL_ARGS"
-install_gvisor
-register_gvisor_to_k3s
+setup_gvisor
 echo_final "Failed to install k3s master node." "Another k3s master node installed successfully."

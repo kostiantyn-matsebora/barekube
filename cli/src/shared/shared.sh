@@ -4,42 +4,22 @@ timestamp() {
   date +%F_%T # current date and time
 }
 
-green() {
-    echo -e "\033[0;32m$1\033[0m"
-}
-
-yellow_bold() {
-    echo -e "\033[1;33m$1\033[0m"
-}
-
-red() {
-    echo -e "\033[0;31m$1\033[0m"
-}
-
-green_bold() {
-    echo -e "\033[1;92m$1\033[0m"
-}
-
-magenta() {
-    echo -e "\033[0;35m$1\033[0m"
+# Prints "[timestamp] MESSAGE" in the colour given by a colors.sh function.
+log_line() {
+    local COLOR="$1"
+    echo -e "$("$COLOR" "[$(timestamp)] $2\n")"
 }
 
 echo_message(){
-    echo -e "$(green "[$(timestamp)] $1\n")"
+    log_line green "$1"
 }
 
 echo_info(){
-    echo -e "$(yellow_bold "[$(timestamp)] $1\n")"
-
-}
-
-echo_important(){
-    echo -e "$(magenta "[$(timestamp)] $1\n")"
-
+    log_line yellow_bold "$1"
 }
 
 echo_error(){
-    echo -e "$(red "[$(timestamp)] $1\n")"
+    log_line red "$1"
 }
 
 function prompt_message(){
@@ -114,14 +94,6 @@ function yes_or_no(){
     [[ "$ANSWER" == [yY] ]]
 }
 
-function exit_if_answer_no() {
-    if [[ $? -ne 0 ]]
-    then
-        echo_message "Exiting..."
-        exit 0
-    fi
-}
-
 function is_automatic_mode(){
     if [[ "$1" == "--yes" || "$1" == "-y" ]]
     then
@@ -129,10 +101,6 @@ function is_automatic_mode(){
     else
         echo 1
     fi
-}
-
-function press_any_key(){
-    read -n 1 -s -r -p "Press any key to continue..."
 }
 
 function check_if_command_exists(){

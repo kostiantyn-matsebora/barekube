@@ -2,6 +2,7 @@
 # Tests for the bashly command snippets under commands/: each one must call the
 # right library functions in the right order. Library functions are mocked.
 source "$(dirname "${BASH_SOURCE[0]}")/lib/testing.sh"
+source "$CLI_DIR/src/shared/colors.sh"
 source "$CLI_DIR/src/shared/shared.sh"
 
 load_command install/dependencies barekube_install_dependencies_command
@@ -22,7 +23,7 @@ load_command upgrade barekube_upgrade_command
 setup() {
   declare -gA args=()
   mock inspect_args check_k3s_installed gather_master_params gather_additional_args \
-    update_packages install_wireguard install_gvisor register_gvisor_to_k3s \
+    update_packages install_wireguard setup_gvisor \
     install_k3s_initial_master install_k3s_master install_k3s_agent show_k3s_token \
     install_longhorn_dependencies start_k3s_master stop_k3s_master start_k3s_agent \
     stop_k3s_agent killall_k3s uninstall_k3s enable_autoupdate upgrade_barekube \
@@ -50,8 +51,7 @@ test_install_initial_master_without_reinstall() {
     "echo_info Installing initial k3s master node..." \
     "gather_additional_args " \
     "install_k3s_initial_master --disable=traefik" \
-    "install_gvisor " \
-    "register_gvisor_to_k3s " \
+    "setup_gvisor " \
     "show_k3s_token " \
     "echo_final Failed to install initial k3s master node. Initial k3s master node installed successfully."
 }
@@ -72,8 +72,7 @@ test_install_master_node() {
   assert_called "echo_info Master parameters: --server=https://m:6443 --token=t"
   assert_calls_in_order \
     "inspect_args " "check_k3s_installed " "gather_master_params " "gather_additional_args " \
-    "install_k3s_master --server=https://m:6443 --token=t " "install_gvisor " \
-    "register_gvisor_to_k3s " \
+    "install_k3s_master --server=https://m:6443 --token=t " "setup_gvisor " \
     "echo_final Failed to install k3s master node. Another k3s master node installed successfully."
 }
 
@@ -96,8 +95,7 @@ test_install_agent_node() {
     "gather_master_params " \
     "echo_info Installing agent node..." \
     "install_k3s_agent --server=https://m:6443 --token=t" \
-    "install_gvisor " \
-    "register_gvisor_to_k3s " \
+    "setup_gvisor " \
     "echo_final Failed to install k3s agent node. Another k3s agent node installed successfully."
 }
 
@@ -110,7 +108,7 @@ test_install_agent_node_passes_reinstall_flag() {
 test_install_gvisor() {
   run barekube_install_gvisor_command
   assert_status 0
-  assert_calls "inspect_args " "install_gvisor " "register_gvisor_to_k3s "
+  assert_calls "inspect_args " "setup_gvisor "
 }
 
 test_install_longhorn_dependencies() {

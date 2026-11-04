@@ -1,61 +1,7 @@
 #!/bin/bash
 
 K3S_INSTALL_URL="https://get.k3s.io"
-K3S_CONTAINERD_DIR="/var/lib/rancher/k3s/agent/etc/containerd"
 K3S_FLANNEL_BACKEND="wireguard-native"
-
-update_packages() {
-    run_privileged "Updating packages..." "Failed to update packages" apt update
-}
-
-install_containerd() {
-    run_privileged "Installing containerd..." "Failed to install containerd" apt install -y containerd
-}
-
-install_gvisor() {
-     echo_message "Installing gVisor dependencies..."
-     sudo apt install -y \
-        apt-transport-https \
-        ca-certificates \
-        curl \
-        gnupg
-
-    echo_message "Adding gVisor key..."
-    curl -fsSL https://gvisor.dev/archive.key | sudo gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | sudo tee /etc/apt/sources.list.d/gvisor.list > /dev/null
-
-    exit_if_error "Failed to add gVisor key"
-
-    echo_message "Installing gVisor..."
-    sudo apt-get update && sudo apt-get install -y runsc
-
-    exit_if_error "Failed to install gVisor"
-}
-
-register_gvisor_to_k3s() {
-    local CONFIG="$K3S_CONTAINERD_DIR/config.toml"
-    echo_message "Checking containerd configuration..."
-    grep -q ".containerd.runtimes.runsc" "$CONFIG.tmpl" && return 0
-
-    echo_message "Copying containerd config to template..."
-    cp "$CONFIG" "$CONFIG.tmpl"
-
-    echo_info "Adding runsc runtime to containerd configuration..."
-sudo tee -a "$CONFIG.tmpl" <<EOF
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
-  runtime_type = "io.containerd.runsc.v1"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc.options]
-  TypeUrl = "io.containerd.runsc.v1.options"
-  ConfigPath = "/etc/containerd/runsc.toml"
-EOF
-    exit_if_error "Failed to add runsc runtime to containerd configuration"
-
-    run_privileged "Restarting k3s..." "Failed to register gVisor to k3s" systemctl restart k3s
-}
-
-install_wireguard() {
-    run_privileged "Installing wireguard..." "Failed to install wireguard" apt install -y wireguard
-}
 
 check_k3s_installed() {
     echo_message "Checking if k3s is already installed..."
@@ -98,11 +44,13 @@ gather_master_params() {
     echo " --server=$MASTER_URL --token=$TOKEN"
 }
 
-# Pipes the official k3s installer into sh with the given arguments.
+# Pipes the official k3s installer into sh. The arguments are split on
+# whitespace only - never evaluated - so input cannot inject shell syntax.
 run_k3s_installer() {
-    local COMMAND="curl -sfL $K3S_INSTALL_URL | sh -s - $*"
-    echo_message "Running command: $COMMAND"
-    eval "$COMMAND"
+    local -a INSTALLER_ARGS
+    read -ra INSTALLER_ARGS <<<"$*"
+    echo_message "Running command: curl -sfL $K3S_INSTALL_URL | sh -s - ${INSTALLER_ARGS[*]}"
+    curl -sfL "$K3S_INSTALL_URL" | sh -s - "${INSTALLER_ARGS[@]}"
     exit_if_error "Failed to install k3s"
     return 0
 }

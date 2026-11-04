@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests for src/shared/shared.sh.
 source "$(dirname "${BASH_SOURCE[0]}")/lib/testing.sh"
+source "$CLI_DIR/src/shared/colors.sh"
 source "$CLI_DIR/src/shared/shared.sh"
 
 TS_RE='\[[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}:[0-9]{2}:[0-9]{2}\]'
@@ -16,17 +17,10 @@ test_timestamp_has_date_and_time() {
   assert_match "^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}:[0-9]{2}:[0-9]{2}\$" "$(timestamp)"
 }
 
-test_colour_helpers_use_their_ansi_codes() {
-  assert_eq "${ESC}[0;32mx${ESC}[0m" "$(green x)"
-  assert_eq "${ESC}[1;33mx${ESC}[0m" "$(yellow_bold x)"
-  assert_eq "${ESC}[0;31mx${ESC}[0m" "$(red x)"
-  assert_eq "${ESC}[1;92mx${ESC}[0m" "$(green_bold x)"
-  assert_eq "${ESC}[0;35mx${ESC}[0m" "$(magenta x)"
-}
 
 test_echo_message_is_green_and_timestamped() {
   run echo_message "hello"
-  assert_match "^${ESC}\[0;32m${TS_RE} hello" "$output"
+  assert_match "^${ESC}\[32m${TS_RE} hello" "$output"
 }
 
 test_echo_info_is_yellow_and_timestamped() {
@@ -34,14 +28,10 @@ test_echo_info_is_yellow_and_timestamped() {
   assert_match "^${ESC}\[1;33m${TS_RE} hello" "$output"
 }
 
-test_echo_important_is_magenta_and_timestamped() {
-  run echo_important "hello"
-  assert_match "^${ESC}\[0;35m${TS_RE} hello" "$output"
-}
 
 test_echo_error_is_red_and_timestamped() {
   run echo_error "hello"
-  assert_match "^${ESC}\[0;31m${TS_RE} hello" "$output"
+  assert_match "^${ESC}\[31m${TS_RE} hello" "$output"
 }
 
 # ------------------------------------------------------------------- input
@@ -71,14 +61,10 @@ test_read_input_with_empty_line_returns_nothing() {
   assert_eq "" "$output"
 }
 
-test_press_any_key_consumes_one_key() {
-  run_input "x" press_any_key
-  assert_status 0
-}
 
 test_prompt_message_is_timestamped_bold_green() {
   run prompt_message "Hi"
-  assert_match "^${ESC}\[1;92m${TS_RE} Hi" "$output"
+  assert_match "^${ESC}\[1;32m${TS_RE} Hi" "$output"
 }
 
 test_remove_whitespace_strips_spaces_tabs_and_newlines() {
@@ -196,18 +182,7 @@ test_yes_or_no_asks_with_a_y_n_suffix() {
   assert_called "question Sure? [y/n]"
 }
 
-test_exit_if_answer_no_continues_after_yes() {
-  run after_success exit_if_answer_no
-  assert_status 0
-  assert_eq "continued" "$output"
-}
 
-test_exit_if_answer_no_exits_cleanly_after_no() {
-  run after_failure exit_if_answer_no
-  assert_status 0
-  assert_output_contains "Exiting..."
-  refute_output_contains "continued"
-}
 
 # ------------------------------------------------------------------- misc
 

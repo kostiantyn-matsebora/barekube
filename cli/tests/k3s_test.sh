@@ -1,127 +1,12 @@
 #!/usr/bin/env bash
 # Tests for src/k3s.sh. External commands are replaced by logging mocks.
 source "$(dirname "${BASH_SOURCE[0]}")/lib/testing.sh"
+source "$CLI_DIR/src/shared/colors.sh"
 source "$CLI_DIR/src/shared/shared.sh"
 source "$CLI_DIR/src/k3s.sh"
 
-CONFIG_DIR=/var/lib/rancher/k3s/agent/etc/containerd
-
 setup() {
-  mock sudo curl sh cp grep dpkg systemctl check_if_command_exists
-  mock_capture_stdin sudo
-  mock_output dpkg amd64
-}
-
-# --------------------------------------------------------------- packages
-
-test_update_packages_runs_apt_update() {
-  run update_packages
-  assert_status 0
-  assert_calls "sudo apt update"
-  assert_output_contains "Updating packages..."
-}
-
-test_update_packages_reports_failure() {
-  mock_fail sudo
-  run update_packages
-  assert_output_contains "Failed to update packages"
-}
-
-test_install_containerd_installs_the_package() {
-  run install_containerd
-  assert_status 0
-  assert_calls "sudo apt install -y containerd"
-}
-
-test_install_containerd_reports_failure() {
-  mock_fail sudo
-  run install_containerd
-  assert_output_contains "Failed to install containerd"
-}
-
-test_install_wireguard_installs_the_package() {
-  run install_wireguard
-  assert_status 0
-  assert_calls "sudo apt install -y wireguard"
-}
-
-test_install_wireguard_reports_failure() {
-  mock_fail sudo
-  run install_wireguard
-  assert_output_contains "Failed to install wireguard"
-}
-
-# ----------------------------------------------------------------- gVisor
-
-test_install_gvisor_installs_prerequisites_key_repository_and_runsc() {
-  run install_gvisor
-  assert_status 0
-  # curl|gpg|tee run concurrently, so only membership is asserted here.
-  assert_called "sudo apt install -y apt-transport-https ca-certificates curl gnupg"
-  assert_called "curl -fsSL https://gvisor.dev/archive.key"
-  assert_called "sudo gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg"
-  assert_called "sudo tee /etc/apt/sources.list.d/gvisor.list"
-  assert_called "sudo apt-get update"
-  assert_called "sudo apt-get install -y runsc"
-}
-
-test_install_gvisor_writes_apt_source_for_the_host_architecture() {
-  run install_gvisor
-  assert_file_contains "$STDIN_LOG" \
-    "deb [arch=amd64 signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main"
-}
-
-test_install_gvisor_reports_repository_failure() {
-  mock_fail sudo 'tee*'
-  run install_gvisor
-  assert_output_contains "Failed to add gVisor key"
-  refute_called "sudo apt-get install -y runsc"
-}
-
-test_install_gvisor_reports_package_failure() {
-  mock_fail sudo 'apt-get install*'
-  run install_gvisor
-  assert_output_contains "Failed to install gVisor"
-}
-
-test_install_gvisor_skips_runsc_when_apt_update_fails() {
-  mock_fail sudo 'apt-get update'
-  run install_gvisor
-  assert_output_contains "Failed to install gVisor"
-  refute_called "sudo apt-get install -y runsc"
-}
-
-test_register_gvisor_does_nothing_when_runtime_is_already_configured() {
-  run register_gvisor_to_k3s
-  assert_status 0
-  assert_calls "grep -q .containerd.runtimes.runsc $CONFIG_DIR/config.toml.tmpl"
-}
-
-test_register_gvisor_adds_runtime_to_template_and_restarts_k3s() {
-  mock_fail grep
-  run register_gvisor_to_k3s
-  assert_status 0
-  assert_called "cp $CONFIG_DIR/config.toml $CONFIG_DIR/config.toml.tmpl"
-  assert_called "sudo tee -a $CONFIG_DIR/config.toml.tmpl"
-  assert_called "sudo systemctl restart k3s"
-  assert_file_contains "$STDIN_LOG" '[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]'
-  assert_file_contains "$STDIN_LOG" 'runtime_type = "io.containerd.runsc.v1"'
-  assert_file_contains "$STDIN_LOG" 'ConfigPath = "/etc/containerd/runsc.toml"'
-}
-
-test_register_gvisor_reports_template_write_failure() {
-  mock_fail grep
-  mock_fail sudo 'tee*'
-  run register_gvisor_to_k3s
-  assert_output_contains "Failed to add runsc runtime to containerd configuration"
-  refute_called "sudo systemctl restart k3s"
-}
-
-test_register_gvisor_reports_restart_failure() {
-  mock_fail grep
-  mock_fail sudo 'systemctl*'
-  run register_gvisor_to_k3s
-  assert_output_contains "Failed to register gVisor to k3s"
+  mock sudo curl sh check_if_command_exists
 }
 
 # ---------------------------------------------------------- already-installed
@@ -266,6 +151,13 @@ test_install_k3s_agent_reports_failure() {
   mock_fail sh
   run install_k3s_agent "--server=x --token=t"
   assert_output_contains "Failed to install k3s"
+}
+
+test_run_k3s_installer_never_evaluates_its_arguments() {
+  run install_k3s_agent "--server=x; touch $TEST_TMP/pwned"
+  assert_status 0
+  [[ ! -e "$TEST_TMP/pwned" ]] || fail "argument was executed as shell code"
+  assert_called "sh -s - agent --server=x; touch $TEST_TMP/pwned"
 }
 
 test_show_k3s_token_prints_the_server_token() {
