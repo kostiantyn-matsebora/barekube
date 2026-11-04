@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Tests for src/haproxy.sh, src/longhorn.sh, src/system.sh and src/cli.sh.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/testing.sh"
+source "$CLI_DIR/src/shared/shared.sh"
+source "$CLI_DIR/src/haproxy.sh"
+source "$CLI_DIR/src/longhorn.sh"
+source "$CLI_DIR/src/system.sh"
+source "$CLI_DIR/src/cli.sh"
+
+setup() {
+  mock sudo wget chmod barekube
+  mock_output barekube "0.2.0"
+  HOME="$TEST_TMP/home"
+}
+
+# ------------------------------------------------------------------ haproxy
+
+test_install_haproxy_installs_haproxy_and_keepalived() {
+  run install_haproxy
+  assert_status 0
+  assert_calls "sudo apt-get install -y haproxy keepalived"
+}
+
+test_install_haproxy_reports_failure() {
+  mock_fail sudo
+  run install_haproxy
+  assert_output_contains "Error installing HAProxy"
+}
+
+# ----------------------------------------------------------------- longhorn
+
+test_install_longhorn_dependencies_installs_all_packages_in_order() {
+  run install_longhorn_dependencies
+  assert_status 0
+  assert_calls \
+    "sudo apt update" \
+    "sudo apt install -y open-iscsi" \
+    "sudo apt install -y bash" \
+    "sudo apt install -y curl" \
+    "sudo apt install -y grep" \
+    "sudo apt install -y nfs-common"
+}
+
+known_bug_install_longhorn_dependencies_reports_failure() {
+  # The function always ends with `return 0`, hiding failed apt calls.
+  mock_fail sudo 'apt install -y open-iscsi'
+  run install_longhorn_dependencies
+  [[ "$status" -ne 0 ]] || fail "failed install reported as success"
+}
+
+# ------------------------------------------------------------------- system
+
+test_enable_autoupdate_installs_configures_and_opens_the_config() {
+  run enable_autoupdate
+  assert_status 0
+  assert_calls \
+    "sudo apt update" \
+    "sudo apt install -y unattended-upgrades" \
+    "sudo dpkg-reconfigure --priority=low unattended-upgrades" \
+    "sudo nano /etc/apt/apt.conf.d/50unattended-upgrades"
+  assert_output_contains "Enabling automatic updates of system packages..."
+  assert_output_contains "Automatic updates enabled."
+}
+
+# -------------------------------------------------------------------- upgrade
+
+test_upgrade_barekube_automatic_mode_installs_into_home_bin() {
+  run upgrade_barekube --yes
+  assert_status 0
+  assert_calls \
+    "barekube --version" \
+    "wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/cli/release/barekube -O $HOME/bin/barekube" \
+    "chmod +x $HOME/bin/barekube" \
+    "barekube --version"
+  assert_output_contains "Upgrading barekube CLI at $HOME/bin"
+  assert_output_contains "upgraded successfully to version 0.2.0"
+}
+
+test_upgrade_barekube_short_flag_is_automatic_too() {
+  run upgrade_barekube -y
+  assert_status 0
+  assert_called "chmod +x $HOME/bin/barekube"
+  refute_called_matching '^question'
+}
+
+test_upgrade_barekube_interactive_mode_defaults_to_home_bin() {
+  script_fn question ""
+  run upgrade_barekube
+  assert_status 0
+  assert_called "question Enter the path where workspace is installed ($HOME/bin as default): "
+  assert_called "chmod +x $HOME/bin/barekube"
+}
+
+test_upgrade_barekube_interactive_mode_uses_the_entered_path() {
+  script_fn question /opt/tools
+  run upgrade_barekube
+  assert_status 0
+  assert_called "wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/cli/release/barekube -O /opt/tools/barekube"
+  assert_called "chmod +x /opt/tools/barekube"
+}
+
+test_upgrade_barekube_reports_failure() {
+  mock_fail chmod
+  run upgrade_barekube --yes
+  assert_output_contains "Error upgrading barekube"
+  refute_output_contains "upgraded successfully"
+}
+
+known_bug_upgrade_barekube_accepts_a_multi_character_path() {
+  # `question` reads a single key (read -n 1), so only the first character of
+  # a typed path is used.
+  upgrade_from_stdin() { upgrade_barekube <<<"/opt/tools"; }
+  unset -f question
+  run upgrade_from_stdin
+  assert_called "chmod +x /opt/tools/barekube"
+}
+
+run_tests
