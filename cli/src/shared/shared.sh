@@ -42,20 +42,45 @@ echo_error(){
     echo -e "$(red "[$(timestamp)] $1\n")"
 }
 
+function prompt_message(){
+    green_bold "[$(timestamp)] $1\n"
+}
+
+function remove_whitespace(){
+    echo "${1//[$'\t\r\n ']}"
+}
+
 function question(){
-    local MESSAGE
-    MESSAGE=$(green_bold "[$(timestamp)] $1\n")  
-    read -sn 1 -r -p "$MESSAGE" ANSWER
-    # shellcheck disable=SC2028
-    echo  "${ANSWER//[$'\t\r\n ']}"
+    local ANSWER
+    read -sn 1 -r -p "$(prompt_message "$1")" ANSWER
+    remove_whitespace "$ANSWER"
 }
 
 function read_input(){
-    local MESSAGE
-    MESSAGE=$(green_bold "[$(timestamp)] $1\n")  
-    read -r -p "$MESSAGE" ANSWER
-    # shellcheck disable=SC2028
-    echo  "${ANSWER//[$'\t\r\n ']}"
+    local ANSWER
+    read -r -p "$(prompt_message "$1")" ANSWER
+    remove_whitespace "$ANSWER"
+}
+
+# Reads a value; reports ERROR_MESSAGE on stderr and fails when empty.
+function read_required_input(){
+    local VALUE
+    VALUE=$(read_input "$1")
+    if [[ -z "$VALUE" ]]
+    then
+        echo_error "$2" >&2
+        return 1
+    fi
+    echo "$VALUE"
+}
+
+# Runs "sudo COMMAND..." announcing PROGRESS and stopping with FAILURE on error.
+function run_privileged(){
+    local PROGRESS="$1" FAILURE="$2"
+    shift 2
+    echo_message "$PROGRESS"
+    sudo "$@"
+    exit_if_error "$FAILURE"
 }
 
 function exit_if_error(){
@@ -86,12 +111,7 @@ function yes_or_no(){
 
     local ANSWER
     ANSWER=$(question "$1 [y/n]")
-    if [[ "$ANSWER" = "y" || "$ANSWER" = "Y" ]]
-    then
-        return 0
-    else
-        return 1
-    fi
+    [[ "$ANSWER" == [yY] ]]
 }
 
 function exit_if_answer_no() {
@@ -117,10 +137,4 @@ function press_any_key(){
 
 function check_if_command_exists(){
     command -v "$1" &> /dev/null
-    if [ $? -ne 0 ]
-    then
-        return 1
-    else
-        return 0
-    fi
 }

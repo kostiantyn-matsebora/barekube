@@ -76,6 +76,53 @@ test_press_any_key_consumes_one_key() {
   assert_status 0
 }
 
+test_prompt_message_is_timestamped_bold_green() {
+  run prompt_message "Hi"
+  assert_match "^${ESC}\[1;92m${TS_RE} Hi" "$output"
+}
+
+test_remove_whitespace_strips_spaces_tabs_and_newlines() {
+  assert_eq "ab" "$(remove_whitespace $' a\tb\n ')"
+}
+
+test_read_required_input_returns_the_value() {
+  script_fn read_input value
+  run read_required_input "Prompt:" "is required"
+  assert_status 0
+  assert_eq "value" "$output"
+}
+
+test_read_required_input_fails_with_the_message_when_empty() {
+  script_fn read_input ""
+  run read_required_input "Prompt:" "is required"
+  assert_status 1
+  assert_output_contains "is required"
+}
+
+test_read_required_input_reports_errors_on_stderr() {
+  script_fn read_input ""
+  assert_eq "" "$(read_required_input "Prompt:" "is required" 2>/dev/null)"
+}
+
+# run_privileged is exercised with a mocked sudo
+test_run_privileged_announces_and_runs_the_command_with_sudo() {
+  mock sudo
+  run run_privileged "Doing it..." "Could not" apt install -y pkg
+  assert_status 0
+  assert_output_contains "Doing it..."
+  assert_calls "sudo apt install -y pkg"
+}
+
+test_run_privileged_reports_failure_and_stops() {
+  mock sudo
+  mock_fail sudo
+  run_privileged_then_continue() { run_privileged "Doing it..." "Could not" apt update; echo continued; }
+  run run_privileged_then_continue
+  assert_status 1
+  assert_output_contains "Could not"
+  refute_output_contains "continued"
+}
+
 # ----------------------------------------------------------- error handling
 
 test_exit_if_error_is_silent_after_success() {
