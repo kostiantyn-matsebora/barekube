@@ -1,0 +1,47 @@
+name: CLI tests
+
+on:
+  pull_request:
+    paths:
+      - "cli/**"
+      - ".github/workflows/cli-tests.yml"
+  push:
+    branches: [master]
+    paths:
+      - "cli/**"
+      - ".github/workflows/cli-tests.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit and end-to-end tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exits non-zero when any test fails, failing the job (and the PR check).
+      - name: Run tests with coverage
+        working-directory: cli
+        run: tests/run.sh --coverage -v
+
+  release-up-to-date:
+    name: Generated release is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same pinned version that generated the committed release/barekube.
+      - name: Regenerate release/barekube
+        working-directory: cli
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/app" \
+            dannyben/bashly:1.2.13 generate
+
+      - name: Fail if the committed release differs
+        run: git diff --exit-code -- cli/release/barekube
