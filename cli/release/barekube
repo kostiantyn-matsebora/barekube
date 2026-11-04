@@ -882,6 +882,7 @@ function echo_final(){
         echo_error "$1"
         exit "$STATUS"
     else
+
         echo_info "$2"
     fi
 }
