@@ -638,14 +638,6 @@ setup_gvisor() {
     register_gvisor_to_k3s
 }
 
-# ./src/haproxy.sh
-#!/bin/bash
-
-install_haproxy() {
-  run_privileged "Installing HAProxy..." "Error installing HAProxy" \
-    apt-get install -y haproxy keepalived
-}
-
 # ./src/k3s.sh
 #!/bin/bash
 

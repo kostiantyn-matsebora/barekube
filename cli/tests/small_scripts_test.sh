@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Tests for src/haproxy.sh, src/longhorn.sh, src/system.sh and src/cli.sh.
+# Tests for src/longhorn.sh, src/system.sh and src/cli.sh.
 source "$(dirname "${BASH_SOURCE[0]}")/lib/testing.sh"
 source "$CLI_DIR/src/shared/colors.sh"
 source "$CLI_DIR/src/shared/shared.sh"
-source "$CLI_DIR/src/haproxy.sh"
 source "$CLI_DIR/src/longhorn.sh"
 source "$CLI_DIR/src/system.sh"
 source "$CLI_DIR/src/cli.sh"
@@ -12,20 +11,6 @@ setup() {
   mock sudo wget chmod barekube
   mock_output barekube "0.2.0"
   HOME="$TEST_TMP/home"
-}
-
-# ------------------------------------------------------------------ haproxy
-
-test_install_haproxy_installs_haproxy_and_keepalived() {
-  run install_haproxy
-  assert_status 0
-  assert_calls "sudo apt-get install -y haproxy keepalived"
-}
-
-test_install_haproxy_reports_failure() {
-  mock_fail sudo
-  run install_haproxy
-  assert_output_contains "Error installing HAProxy"
 }
 
 # ----------------------------------------------------------------- longhorn
