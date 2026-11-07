@@ -2,6 +2,7 @@ name: Release
 
 # Publishes a GitHub release for a version tag: the CLI script, its SHA-256
 # checksum, a keyless Sigstore signature and a build provenance attestation.
+# It runs only after the unit tests and the five-node cluster test pass.
 # Nothing is signed from a developer machine; the signing identity is this
 # workflow at a version tag, which is what `barekube upgrade` verifies.
 on:
@@ -16,9 +17,15 @@ jobs:
     permissions:
       contents: read
 
+  # A release needs a real cluster: five nodes built and checked end to end.
+  e2e:
+    uses: ./.github/workflows/e2e.yml
+    permissions:
+      contents: read
+
   release:
     name: Build, sign and publish
-    needs: tests
+    needs: [tests, e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release

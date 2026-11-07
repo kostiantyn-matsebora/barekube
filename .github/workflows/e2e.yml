@@ -8,8 +8,6 @@ on:
     - cron: "23 3 * * *"
   workflow_dispatch:
   workflow_call:
-  push: # TEMPORARY, while the workflow is being developed
-    branches: [e2e-cluster]
 
 permissions:
   contents: read
