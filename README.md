@@ -53,7 +53,7 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
    kubectl get nodes
    ```
 
-Run `./play.sh` again to add machines or change settings. More: [settings, removing nodes, teardown, and installing the playbooks as an Ansible collection from Galaxy](orchestration/ansible/README.md). To set up one node by hand, [use the CLI](#installing-the-cli).
+Add machines or change settings: run `./play.sh` again. [More](orchestration/ansible/README.md). One node by hand: [use the CLI](#installing-the-cli).
 
 ## Installing the CLI
 
@@ -149,39 +149,27 @@ MIT License: https://github.com/kostiantyn-matsebora/barekube/blob/master/LICENS
 Copyright (c) 2025 Kostiantyn Matsebora
 ```
 
-## Running barekube from scripts
-
-By default the install commands ask you questions. To run them from a script, pass the answers as flags and add `--yes`. Barekube then stops with an error if something is missing, instead of waiting for you to type it.
-
-The join token is not a flag. Put it in the `K3S_TOKEN` environment variable, so it stays out of `ps` output and your shell history.
+## Running from scripts
 
 ```shell
-# First master
+export K3S_TOKEN='<token from the first master>'   # not a flag: stays out of ps and history
 barekube install initial-master --yes --tls-san k8s.home.lan --disable traefik
-
-# Another master or an agent
-export K3S_TOKEN='<token printed by the first master>'
 barekube install master-node --yes --server https://192.168.1.10:6443
 barekube install agent-node  --yes --server https://192.168.1.10:6443
 ```
 
-When an install command finishes it prints `installed` or `already installed`, so a script can tell whether anything changed.
+`--yes` skips the questions. Each command ends with `installed` or `already installed`.
 
 ## gVisor as the default
 
-barekube installs two `RuntimeClass` objects on the control plane: `gvisor` (the sandbox) and `runc` (the normal runtime). A pod picks one with `runtimeClassName`. A pod that names none runs with the normal runtime.
-
-To put every new pod in the gVisor sandbox unless it says otherwise, add `--gvisor-default` when you install a control-plane node, or switch it later on any control-plane node:
+Pods use `runc` unless they set `runtimeClassName: gvisor`. To make gVisor the default:
 
 ```shell
-barekube install initial-master --gvisor-default
-barekube install gvisor --default       # a cluster that is already running
-barekube install gvisor --no-default    # and back
+barekube install initial-master --gvisor-default   # at install
+barekube install gvisor --default                  # running cluster
+barekube install gvisor --no-default               # back
 ```
 
-This installs a Kubernetes admission policy that sets `runtimeClassName: gvisor` on new pods that name no class. It needs a Kubernetes version that has `MutatingAdmissionPolicy`. It leaves alone:
-
-- the `kube-system`, `kube-public`, `kube-node-lease` and `longhorn-system` namespaces;
-- pods that use the host network, PID or IPC namespaces, and pods with a privileged container.
-
-gVisor can't run those. For any other pod that needs the host, set `runtimeClassName: runc`.
+- Skipped: `kube-system`, `kube-public`, `kube-node-lease`, `longhorn-system`, pods on the host network, PID or IPC namespace, privileged pods
+- Opt out: `runtimeClassName: runc`
+- Needs: Kubernetes with `MutatingAdmissionPolicy`
