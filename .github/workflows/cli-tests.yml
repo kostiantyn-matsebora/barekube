@@ -75,6 +75,11 @@ jobs:
       - name: Syntax check
         working-directory: orchestration/ansible
         run: ansible-playbook -i inventory.example.yml site.yml --syntax-check
+      - name: The Docker wrapper works
+        working-directory: orchestration/ansible
+        env:
+          BAREKUBE_USE_DOCKER: "1"
+        run: ./play.sh -i inventory.example.yml site.yml --syntax-check
 
   # The single required status check for branch protection.
   ci-green:
