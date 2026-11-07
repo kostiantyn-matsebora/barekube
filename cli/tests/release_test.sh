@@ -31,6 +31,8 @@ setup() {
   make_stub cp
   make_stub grep 1
   make_stub dpkg 0 amd64
+  make_stub sha256sum
+  make_stub cosign
   make_stub barekube 0 "$VERSION"
   cat >"$STUBS/wget" <<STUB
 #!/bin/sh
@@ -371,12 +373,27 @@ test_system_enable_autoupdate() {
     "sudo nano /etc/apt/apt.conf.d/50unattended-upgrades"
 }
 
-test_upgrade_downloads_the_latest_release() {
+test_upgrade_downloads_and_verifies_the_latest_release() {
   run_input $'\n' barekube_cli upgrade --yes
   assert_status 0
-  assert_called "wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/cli/release/barekube -O $HOME/bin/barekube"
+  assert_called_matching "^wget -q https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube -O "
+  assert_called "sha256sum --check --status SHA256SUMS"
+  assert_called_matching "^cosign verify-blob --bundle .* --certificate-identity-regexp "
   [[ -x "$HOME/bin/barekube" ]] || fail "downloaded CLI is not executable"
   assert_output_contains "upgraded successfully to version $VERSION"
+}
+
+test_upgrade_does_not_install_when_verification_fails() {
+  make_stub cosign 1
+  run barekube_cli upgrade --yes
+  assert_status 1
+  assert_output_contains "Signature verification failed"
+  [[ ! -e "$HOME/bin/barekube" ]] || fail "an unverified script was installed"
+}
+
+test_upgrade_documents_the_skip_signature_check_flag() {
+  run barekube_cli upgrade --help
+  assert_output_contains "--skip-signature-check"
 }
 
 test_upgrade_short_flag_is_accepted() {
@@ -389,7 +406,7 @@ test_upgrade_yes_flag_skips_the_path_prompt() {
   # still prompted for a path.
   run_input "/opt" barekube_cli upgrade --yes
   assert_status 0
-  assert_called "wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/cli/release/barekube -O $HOME/bin/barekube"
+  assert_called_matching "^wget -q .*/barekube -O "
 }
 
 run_tests

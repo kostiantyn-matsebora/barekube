@@ -22,12 +22,12 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
 
 To install barekube CLI you simply must do the following steps:
 
-- Download barekube CLI script the destination directory, for instance `$HOME/bin`:
+- Download the latest release into the destination directory, for instance `$HOME/bin`:
 
   ```Bash
-    mkdir -p $HOME/bin
-    wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/refs/heads/master/cli/release/barekube -O $HOME/bin/barekube
-    chmod +x $HOME/bin/barekube
+  mkdir -p $HOME/bin
+  wget https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube -O $HOME/bin/barekube
+  chmod +x $HOME/bin/barekube
   ```
 
 - Add an alias to your `.bashrc` or `.bash_profile` file:
@@ -41,6 +41,35 @@ To install barekube CLI you simply must do the following steps:
   ```Bash
   source $HOME/.bashrc
   ```
+
+### Verifying the download
+
+Releases are signed. To check yours before running it, use the [GitHub CLI](https://cli.github.com):
+
+```Bash
+gh attestation verify $HOME/bin/barekube --repo kostiantyn-matsebora/barekube
+```
+
+<details>
+<summary>Without the GitHub CLI, using cosign</summary>
+
+Fetch the checksum and signature next to the script and verify both with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
+
+```Bash
+cd $HOME/bin
+BASE=https://github.com/kostiantyn-matsebora/barekube/releases/latest/download
+wget -q $BASE/SHA256SUMS $BASE/barekube.sigstore.json
+sha256sum --check SHA256SUMS
+cosign verify-blob --bundle barekube.sigstore.json \
+  --certificate-identity-regexp '^https://github\.com/kostiantyn-matsebora/barekube/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  barekube
+rm SHA256SUMS barekube.sigstore.json
+```
+
+</details>
+
+`barekube upgrade` checks new releases itself.
 
 ## Usage
 
@@ -69,7 +98,7 @@ Commands:
   k3s killall                     Kill k3s and all k3s related containers
   k3s start-agent                 Start k3s agent node
   k3s stop-agent                  Stop k3s agent node
-  upgrade                         Upgrade barekube CLI to latest version
+  upgrade                         Upgrade barekube CLI to the latest verified release
 
 Options:
   --help, -h

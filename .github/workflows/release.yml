@@ -1,0 +1,97 @@
+name: Release
+
+# Publishes a GitHub release for a version tag: the CLI script, its SHA-256
+# checksum, a keyless Sigstore signature and a build provenance attestation.
+# Nothing is signed from a developer machine; the signing identity is this
+# workflow at a version tag, which is what `barekube upgrade` verifies.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions: {}
+
+jobs:
+  tests:
+    uses: ./.github/workflows/cli-tests.yml
+    permissions:
+      contents: read
+
+  release:
+    name: Build, sign and publish
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+      id-token: write # keyless Sigstore signing and the attestation
+      attestations: write
+    steps:
+      # Third-party actions are pinned to a commit; Dependabot keeps them current.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Release only commits that are on master
+        run: |
+          git fetch --no-tags origin master
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+
+      - name: Check the tag matches the CLI version
+        run: |
+          version="$(sed -n 's/^version: *//p' cli/bashly.yml | tr -d '\r')"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match the CLI version v$version in cli/bashly.yml" >&2
+            exit 1
+          fi
+
+      # The shipped script is built here, from the tagged sources, with the
+      # pinned bashly version - and must equal the committed copy.
+      - name: Build the script
+        working-directory: cli
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/app" \
+            dannyben/bashly:1.2.13 generate
+          git diff --exit-code -- release/barekube
+
+      - name: Checksum
+        working-directory: cli/release
+        run: sha256sum barekube > SHA256SUMS
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Sign
+        working-directory: cli/release
+        run: cosign sign-blob --yes --bundle barekube.sigstore.json barekube
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: cli/release/barekube
+
+      - name: Publish the release
+        working-directory: cli/release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" barekube SHA256SUMS barekube.sigstore.json \
+            --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+
+  # Follows the README as a new user would: downloads the published release,
+  # installs it, runs it and verifies its checksum and signature.
+  verify-install:
+    name: README instructions work on the published release
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Also lets the check run the cosign alternative from the README.
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Run the installation and verification instructions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: cli/tests/readme_install.sh release "$GITHUB_REF_NAME"

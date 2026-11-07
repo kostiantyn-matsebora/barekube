@@ -1,6 +1,7 @@
 name: CLI tests
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches: [master]
@@ -43,13 +44,28 @@ jobs:
       - name: Fail if the committed release differs
         run: git diff --exit-code -- cli/release/barekube
 
+  readme-install:
+    name: README installation steps work
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Runs the commands from the README Installation section in a clean HOME,
+      # against the release script built from this commit, then checks that
+      # barekube is installed and works. The real download and the signature
+      # check run after a release is published (see release.yml).
+      - name: Run the installation instructions
+        run: cli/tests/readme_install.sh local
+
   # The single required status check for branch protection.
   ci-green:
     name: ci-green
     if: always()
-    needs: [test, release-up-to-date]
+    needs: [test, release-up-to-date, readme-install]
     runs-on: ubuntu-latest
     steps:
       - name: Fail unless every job passed
         run: |
-          [ "${{ needs.test.result }}" = "success" ] && [ "${{ needs.release-up-to-date.result }}" = "success" ]
+          [ "${{ needs.test.result }}" = "success" ] \
+            && [ "${{ needs.release-up-to-date.result }}" = "success" ] \
+            && [ "${{ needs.readme-install.result }}" = "success" ]

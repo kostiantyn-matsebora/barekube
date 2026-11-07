@@ -118,12 +118,16 @@ commands:
   - barekube install agent-node --reinstall
 
 - name: upgrade
-  help: Upgrade barekube CLI to latest version
+  help: Upgrade barekube CLI to the latest verified release
   flags: 
   - long: --yes
     short: -y
     help: |-
       Automaticaly upgrades CLI into $HOME/bin directory.
+  - long: --skip-signature-check
+    help: |-
+      Verify the checksum only. By default the Sigstore signature is verified
+      too, which needs cosign.
   dependencies:
   - wget
 footer: |-
