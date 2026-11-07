@@ -5,7 +5,7 @@ following components:
 
 - [gVisor](https://en.wikipedia.org/wiki/GVisor) - security layer for running containers efficiently and securely.
 - [k3](https://k3s.io/) kubernetes cluster with [wireguard](https://www.wireguard.com/) network setup and  optional HA configuration.
-- Highly available kubernetes API provided with [HAProxy](https://www.haproxy.org/).
+- Highly available kubernetes API provided with [kube-vip](https://kube-vip.io/) (planned; no additional infrastructure required).
 - MetalLB as an internal load balancer (optional).
 - Nginx as an internal ingress controller (optional).
 
@@ -36,7 +36,7 @@ using YAML-based specifications like this:
 
 - [x] Create a CLI for provisioning and configuration of bare-metal kubernetes cluster.
 - [ ] Add support of yaml configuration files.
-- [ ] Create a CLI for provisioning and configuration of haproxy.
+- [ ] Add kube-vip based HA for the kubernetes API.
   
 ## Installation
 
