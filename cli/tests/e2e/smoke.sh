@@ -464,7 +464,7 @@ check "Longhorn prerequisites are in place on every node" check_longhorn_prerequ
 check "re-running the gVisor install keeps the cluster healthy" check_gvisor_install_command_can_be_rerun
 check "re-running the Longhorn dependencies install works" check_longhorn_install_command_can_be_rerun
 check "re-running installs is idempotent" check_idempotent_install
-if [[ "$PROVISIONER" == "ansible" ]]; then
+if uses_playbooks; then
   check "kubectl works with the kubeconfig the playbook saved" check_kubectl_works_with_the_saved_kubeconfig
   check "running the playbook again changes nothing" check_playbook_rerun_changes_nothing
   check "the playbook refuses to remove the first master" check_playbook_refuses_to_remove_the_first_master
@@ -474,7 +474,7 @@ fi
 check "the cluster survives losing a master" check_cluster_survives_losing_a_master
 check "an agent can be stopped and started" check_agent_stop_and_start
 check "an agent can be uninstalled and removed" check_agent_uninstall
-if [[ "$PROVISIONER" == "ansible" ]]; then
+if uses_playbooks; then
   check "the uninstall playbook needs a confirmation, then removes k3s everywhere" check_playbook_uninstall_needs_confirmation_and_then_removes_k3s
 fi
 

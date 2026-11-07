@@ -52,15 +52,24 @@ endgroup
 # The Ansible provisioner builds the cluster with the playbook in
 # orchestration/ansible and the CLI of this checkout; everything after the
 # nodes exist is the playbook's work.
-if [[ "$PROVISIONER" == "ansible" ]]; then
+if uses_playbooks; then
   group "Build the cluster with the Ansible playbook"
   FIRST_IP="$(node_ip master-1)"
 
-  # The playbooks, as the release archive a user downloads.
-  rm -rf "$STATE_DIR/pack" "$PLAYBOOK_DIR"
-  "$ROOT/orchestration/package.sh" "$STATE_DIR/pack"
-  tar -xzf "$STATE_DIR/pack/barekube-ansible.tar.gz" -C "$STATE_DIR"
-  cp "$ROOT/cli/release/barekube" "$PLAYBOOK_DIR/barekube"
+  if [[ "$PROVISIONER" == "galaxy" ]]; then
+    # The Ansible collection, built from this checkout and installed like a
+    # user installs it from Galaxy.
+    rm -rf "$STATE_DIR/collection" "$STATE_DIR/collections"
+    ansible-galaxy collection build "$ROOT/orchestration/ansible" --output-path "$STATE_DIR/collection"
+    ansible-galaxy collection install "$STATE_DIR"/collection/kostiantyn_matsebora-barekube-*.tar.gz \
+      --collections-path "$STATE_DIR/collections"
+  else
+    # The playbooks, as the release archive a user downloads.
+    rm -rf "$STATE_DIR/pack" "$PLAYBOOK_DIR"
+    "$ROOT/orchestration/package.sh" "$STATE_DIR/pack"
+    tar -xzf "$STATE_DIR/pack/barekube-ansible.tar.gz" -C "$STATE_DIR"
+    cp "$ROOT/cli/release/barekube" "$PLAYBOOK_DIR/barekube"
+  fi
 
   # The nodes are reached over SSH as the ubuntu user with sudo, like real machines.
   mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -85,8 +94,8 @@ if [[ "$PROVISIONER" == "ansible" ]]; then
     echo "    ansible_user: ubuntu"
     echo "    ansible_become: true"
     echo "    ansible_ssh_common_args: -o StrictHostKeyChecking=accept-new"
-  } >"$PLAYBOOK_DIR/inventory.yml"
-  cat "$PLAYBOOK_DIR/inventory.yml"
+  } >"$STATE_DIR/inventory.yml"
+  cat "$STATE_DIR/inventory.yml"
   run_playbook
   TOKEN="$(node master-1 cat /var/lib/rancher/k3s/server/token)"
   echo "::add-mask::$TOKEN"
