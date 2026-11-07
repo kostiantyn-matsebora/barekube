@@ -42,7 +42,7 @@ To install barekube CLI you simply must do the following steps:
   source $HOME/.bashrc
   ```
 
-## Non-interactive usage
+## Running barekube from scripts
 
 By default the install commands ask you questions. To run them from a script, pass the answers as flags and add `--yes`. Barekube then stops with an error if something is missing, instead of waiting for you to type it.
 
