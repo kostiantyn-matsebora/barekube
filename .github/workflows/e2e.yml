@@ -1,0 +1,61 @@
+name: E2E cluster
+
+# Builds a real five-node cluster (3 masters, 2 agents) with the barekube
+# script of the commit under test, then runs smoke and end-to-end checks on it.
+# Mandatory before a release (release.yml calls it), and run daily and on demand.
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cluster:
+    name: Five-node cluster
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      # The nodes are LXD system containers: full systemd machines with their
+      # own addresses, so barekube runs on them exactly as on bare metal.
+      - name: Set up LXD
+        run: |
+          sudo snap install lxd
+          sudo lxd waitready
+          sudo lxd init --auto
+          sudo chmod 666 /var/snap/lxd/common/lxd/unix.socket
+          # Docker's firewall rules drop forwarded packets, which would cut the
+          # containers off from the network.
+          sudo iptables -P FORWARD ACCEPT
+          sudo ip6tables -P FORWARD ACCEPT || true
+          sudo modprobe -a overlay br_netfilter ip_tables ip6_tables nf_nat
+          lxc profile create barekube-e2e
+          lxc profile edit barekube-e2e <cli/tests/e2e/profile.yaml
+
+      - name: Check the runner kernel has WireGuard
+        run: sudo modprobe wireguard
+
+      - name: Build the cluster
+        run: cli/tests/e2e/provision.sh
+
+      - name: Smoke and end-to-end checks
+        run: cli/tests/e2e/smoke.sh
+
+      - name: Diagnostics
+        if: failure()
+        run: cli/tests/e2e/diagnose.sh

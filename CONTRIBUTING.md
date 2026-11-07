@@ -43,6 +43,12 @@ The CLI is written with [bashly](https://bashly.dev) under `cli/`:
 
 Pull requests are squash-merged and the branch is deleted after the merge.
 
+## The cluster test
+
+The `E2E cluster` workflow builds a real cluster of three masters and two agents (LXD containers on one GitHub runner) with the barekube script of the commit, then checks it end to end: the control plane, the WireGuard mesh, pod and service networking, gVisor, the Longhorn prerequisites, failover and the day-two commands. It runs every day, on demand from the Actions tab, and before every release; a release is not published unless it passes. It is not part of the pull request checks because it takes about ten minutes.
+
+The scripts are in `cli/tests/e2e/`.
+
 ## Releasing
 
 Releases are published by CI from a version tag, never by hand.
@@ -55,6 +61,6 @@ Releases are published by CI from a version tag, never by hand.
    git push origin v0.3.0
    ```
 
-3. The release workflow runs the tests, checks that the tag matches the version, builds the script, and publishes it to GitHub Releases with a checksum, a Sigstore signature and a provenance attestation.
+3. The release workflow runs the tests and the five-node cluster test, checks that the tag matches the version, builds the script, and publishes it to GitHub Releases with a checksum, a Sigstore signature and a provenance attestation.
 
 The workflow refuses a tag that is not on `master`, or that does not match `cli/bashly.yml`.

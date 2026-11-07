@@ -36,7 +36,14 @@ test_install_longhorn_dependencies_installs_all_packages_in_order() {
     "sudo apt install -y bash" \
     "sudo apt install -y curl" \
     "sudo apt install -y grep" \
-    "sudo apt install -y nfs-common"
+    "sudo apt install -y nfs-common" \
+    "sudo systemctl enable --now iscsid"
+}
+
+test_install_longhorn_dependencies_reports_a_failing_iscsid() {
+  mock_fail sudo 'systemctl*'
+  run install_longhorn_dependencies
+  [[ "$status" -ne 0 ]] || fail "a failing iscsid was reported as success"
 }
 
 test_install_longhorn_dependencies_reports_failure() {

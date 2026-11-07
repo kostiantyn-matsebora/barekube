@@ -13,7 +13,7 @@ install_gvisor_prerequisites() {
 
 add_gvisor_apt_key() {
     echo_message "Adding gVisor key..."
-    curl -fsSL "$GVISOR_KEY_URL" | sudo gpg --dearmor -o "$GVISOR_KEYRING"
+    curl -fsSL "$GVISOR_KEY_URL" | sudo gpg --dearmor --yes -o "$GVISOR_KEYRING"
     exit_if_error "Failed to add gVisor key"
 }
 
@@ -37,29 +37,59 @@ install_gvisor() {
     install_gvisor_package
 }
 
-runsc_runtime_config() {
+# The runtime stanza for containerd 1.x (config version 2), which older k3s uses.
+runsc_runtime_config_v2() {
     cat <<'EOF'
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
   runtime_type = "io.containerd.runsc.v1"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc.options]
-  TypeUrl = "io.containerd.runsc.v1.options"
-  ConfigPath = "/etc/containerd/runsc.toml"
 EOF
 }
 
-register_gvisor_to_k3s() {
-    local CONFIG="$K3S_CONTAINERD_DIR/config.toml"
-    echo_message "Checking containerd configuration..."
-    grep -q ".containerd.runtimes.runsc" "$CONFIG.tmpl" && return 0
+# The same for containerd 2.x (config version 3), which current k3s uses. The
+# CRI plugin has a different name there; the version 2 stanza is silently
+# ignored by it, which leaves no runsc runtime registered.
+runsc_runtime_config_v3() {
+    cat <<'EOF'
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]
+  runtime_type = 'io.containerd.runsc.v1'
+EOF
+}
 
-    echo_message "Copying containerd config to template..."
-    cp "$CONFIG" "$CONFIG.tmpl"
-
-    echo_info "Adding runsc runtime to containerd configuration..."
-    runsc_runtime_config | sudo tee -a "$CONFIG.tmpl"
+# Adds the runsc runtime to one k3s containerd template. A new template extends
+# the configuration k3s generates through its base template, so it keeps
+# working as k3s changes its defaults; an existing template is only appended to.
+# Returns 0 when it changed the template, 1 when runsc was already in it.
+# Usage: add_runsc_to_template FILE STANZA_FUNCTION
+add_runsc_to_template() {
+    local FILE="$1" STANZA="$2"
+    sudo grep -qs ".containerd.runtimes.runsc" "$FILE" && return 1
+    if ! sudo test -f "$FILE"
+    then
+        echo '{{ template "base" . }}' | sudo tee "$FILE" > /dev/null
+        exit_if_error "Failed to create the containerd template $FILE"
+    fi
+    echo_info "Adding runsc runtime to $FILE..."
+    "$STANZA" | sudo tee -a "$FILE" > /dev/null
     exit_if_error "Failed to add runsc runtime to containerd configuration"
+    return 0
+}
 
-    run_privileged "Restarting k3s..." "Failed to register gVisor to k3s" systemctl restart k3s
+register_gvisor_to_k3s() {
+    local SERVICE CHANGED=1
+    SERVICE="$(k3s_service_name)"
+    echo_message "Checking containerd configuration..."
+    run_privileged "Preparing the containerd template directory..." "Failed to create $K3S_CONTAINERD_DIR" \
+        mkdir -p "$K3S_CONTAINERD_DIR"
+
+    add_runsc_to_template "$K3S_CONTAINERD_DIR/config.toml.tmpl" runsc_runtime_config_v2 && CHANGED=0
+    add_runsc_to_template "$K3S_CONTAINERD_DIR/config-v3.toml.tmpl" runsc_runtime_config_v3 && CHANGED=0
+    if [[ "$CHANGED" -ne 0 ]]
+    then
+        echo_message "The runsc runtime is already registered."
+        return 0
+    fi
+
+    run_privileged "Restarting $SERVICE..." "Failed to register gVisor to k3s" systemctl restart "$SERVICE"
 }
 
 # Installs gVisor and wires it into k3s - the pair every node install needs.

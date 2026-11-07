@@ -2,6 +2,17 @@
 
 K3S_INSTALL_URL="https://get.k3s.io"
 K3S_FLANNEL_BACKEND="wireguard-native"
+K3S_SYSTEMD_DIR="/etc/systemd/system"
+
+# The service running k3s on this node: agents run k3s-agent, servers run k3s.
+k3s_service_name() {
+    if [[ -f "$K3S_SYSTEMD_DIR/k3s-agent.service" ]]
+    then
+        echo "k3s-agent"
+    else
+        echo "k3s"
+    fi
+}
 
 # Set by the install commands from the repeatable --tls-san and --disable flags.
 TLS_SANS=()
@@ -157,10 +168,16 @@ killall_k3s() {
     run_privileged "Killing k3s..." "Failed to kill k3s" /usr/local/bin/k3s-killall.sh
 }
 
+# Agents have their own uninstall script; servers have k3s-uninstall.sh.
 # Usage: uninstall_k3s [--yes]
 uninstall_k3s() {
+    local SCRIPT="/usr/local/bin/k3s-uninstall.sh"
+    if [[ "$(k3s_service_name)" == "k3s-agent" ]]
+    then
+        SCRIPT="/usr/local/bin/k3s-agent-uninstall.sh"
+    fi
     if yes_or_no "Do you want to uninstall k3s?" "$(is_automatic_mode "$1")"
     then
-        run_privileged "Uninstalling k3s..." "Failed to uninstall k3s" /usr/local/bin/k3s-uninstall.sh
+        run_privileged "Uninstalling k3s..." "Failed to uninstall k3s" "$SCRIPT"
     fi
 }

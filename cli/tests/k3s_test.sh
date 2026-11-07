@@ -7,6 +7,8 @@ source "$CLI_DIR/src/k3s.sh"
 
 setup() {
   mock sudo curl sh check_if_command_exists
+  K3S_SYSTEMD_DIR="$TEST_TMP/systemd"
+  mkdir -p "$K3S_SYSTEMD_DIR"
 }
 
 # ---------------------------------------------------------- already-installed
@@ -293,6 +295,21 @@ test_uninstall_k3s_runs_uninstaller_when_confirmed() {
   assert_status 0
   assert_called "sudo /usr/local/bin/k3s-uninstall.sh"
   assert_output_contains "Uninstalling k3s..."
+}
+
+# Regression: agents have no k3s-uninstall.sh, so uninstalling an agent failed
+# with "command not found".
+test_uninstall_k3s_runs_the_agent_script_on_agent_nodes() {
+  : >"$K3S_SYSTEMD_DIR/k3s-agent.service"
+  run uninstall_k3s --yes
+  assert_status 0
+  assert_calls "sudo /usr/local/bin/k3s-agent-uninstall.sh"
+}
+
+test_k3s_service_name_is_k3s_on_servers_and_k3s_agent_on_agents() {
+  assert_eq "k3s" "$(k3s_service_name)"
+  : >"$K3S_SYSTEMD_DIR/k3s-agent.service"
+  assert_eq "k3s-agent" "$(k3s_service_name)"
 }
 
 test_uninstall_k3s_with_yes_does_not_ask() {
