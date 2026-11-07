@@ -22,31 +22,12 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
 
 To install barekube CLI you simply must do the following steps:
 
-- Download the latest release into a temporary directory, together with its checksum and signature:
-
-  ```Bash
-  cd "$(mktemp -d)"
-  BASE=https://github.com/kostiantyn-matsebora/barekube/releases/latest/download
-  wget $BASE/barekube $BASE/SHA256SUMS $BASE/barekube.sigstore.json
-  ```
-
-- Check that the download is intact and was built by this repository's release workflow. The signature check needs [cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
-
-  ```Bash
-  sha256sum --check SHA256SUMS
-  cosign verify-blob --bundle barekube.sigstore.json \
-    --certificate-identity-regexp '^https://github\.com/kostiantyn-matsebora/barekube/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
-    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-    barekube
-  ```
-
-  If you use the GitHub CLI, `gh attestation verify barekube --repo kostiantyn-matsebora/barekube` checks the build provenance too.
-
-- Install it into the destination directory, for instance `$HOME/bin`:
+- Download the latest release into the destination directory, for instance `$HOME/bin`:
 
   ```Bash
   mkdir -p $HOME/bin
-  install -m 0755 barekube $HOME/bin/barekube
+  wget https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube -O $HOME/bin/barekube
+  chmod +x $HOME/bin/barekube
   ```
 
 - Add an alias to your `.bashrc` or `.bash_profile` file:
@@ -60,6 +41,24 @@ To install barekube CLI you simply must do the following steps:
   ```Bash
   source $HOME/.bashrc
   ```
+
+### Verifying the download
+
+Releases are signed. To check yours before running it, fetch the checksum and signature next to the script and verify both. The signature check needs [cosign](https://docs.sigstore.dev/cosign/system_config/installation/).
+
+```Bash
+cd $HOME/bin
+BASE=https://github.com/kostiantyn-matsebora/barekube/releases/latest/download
+wget -q $BASE/SHA256SUMS $BASE/barekube.sigstore.json
+sha256sum --check SHA256SUMS
+cosign verify-blob --bundle barekube.sigstore.json \
+  --certificate-identity-regexp '^https://github\.com/kostiantyn-matsebora/barekube/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  barekube
+rm SHA256SUMS barekube.sigstore.json
+```
+
+`barekube upgrade` runs the same checks for you.
 
 ## Usage
 
