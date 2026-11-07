@@ -208,7 +208,7 @@ dmesg_in_plain_pod_on() {
   kc run plain --image="$BUSYBOX" --restart=Never \
     --overrides="{\"spec\":{\"nodeName\":\"$1\"}}" --command -- sleep 600 >/dev/null
   kc wait --for=condition=Ready pod/plain --timeout=240s >/dev/null || { kc describe pod plain | tail -20; return 1; }
-  kc exec plain -- dmesg
+  kc exec plain -- dmesg 2>&1 || true  # runc refuses dmesg to unprivileged pods
   kc delete pod plain --wait=true >/dev/null
 }
 
@@ -245,7 +245,7 @@ spec:
 MANIFEST
   kc wait --for=condition=Ready pod/host-runtime --timeout=240s || { kc describe pod host-runtime | tail -20; return 1; }
   local banner
-  banner="$(kc exec host-runtime -- dmesg)"
+  banner="$(kc exec host-runtime -- dmesg 2>&1 || true)"
   ! is_sandboxed "$banner" || { log "a runc pod is sandboxed"; return 1; }
   kc delete pod host-runtime --wait=false >/dev/null
 }
