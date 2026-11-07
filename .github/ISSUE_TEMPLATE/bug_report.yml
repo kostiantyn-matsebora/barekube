@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a problem with the barekube CLI
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: A clear description of the bug, including error messages.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command run
+      description: The exact barekube command and flags.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: barekube version
+      description: Output of `barekube --version`.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Node OS
+      description: Distribution and version, for example Ubuntu 24.04.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output or logs
+      render: shell
