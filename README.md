@@ -15,10 +15,11 @@ Barekube is the low-level foundation of a bare-metal kubernetes platform tailore
 
 What barekube brings:
 
-- [k3s](https://k3s.io/) kubernetes cluster: initial master, additional masters (HA) and agent nodes.
-- [WireGuard](https://www.wireguard.com/) network between the nodes.
-- [gVisor](https://gvisor.dev/) - security layer for running containers efficiently and securely.
-- [Longhorn](https://longhorn.io/) storage prerequisites on the nodes.
+- <img src="assets/icons/k3s.svg" width="20" height="20" align="top"> [k3s](https://k3s.io/) kubernetes cluster: initial master, additional masters (HA) and agent nodes.
+- <img src="assets/icons/wireguard.svg" width="20" height="20" align="top"> [WireGuard](https://www.wireguard.com/) network between the nodes.
+- <img src="assets/icons/gvisor.svg" width="20" height="20" align="top"> [gVisor](https://gvisor.dev/) - security layer for running containers efficiently and securely.
+- <img src="assets/icons/longhorn.svg" width="20" height="20" align="top"> [Longhorn](https://longhorn.io/) storage prerequisites on the nodes.
+- <img src="assets/icons/ansible.svg" width="20" height="20" align="top"> [Ansible](https://www.ansible.com/) playbooks that build, change and remove a whole cluster from an inventory.
 
 Everything above that (HA API endpoint, load balancing, ingress, ...) is up to your platform.
 

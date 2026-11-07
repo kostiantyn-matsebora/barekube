@@ -8,6 +8,9 @@
 # Without -i it reads inventory.yml, and without a playbook it runs site.yml.
 # Anything else is passed on to ansible-playbook.
 #
+# Log in with a password instead of a key: ./play.sh -k (and -K if sudo asks
+# for one).
+#
 # Set BAREKUBE_USE_DOCKER=1 to use Docker even when Ansible is installed.
 #
 # Keep the inventory in this directory (inventory.yml is ignored by git). Your
@@ -56,7 +59,11 @@ args=(
   --volume "$HOME/.kube:/home/barekube/.kube"
 )
 [[ -t 0 ]] && args+=(--tty)
-[[ -d "$HOME/.ssh" ]] && args+=(--volume "$HOME/.ssh:/home/barekube/.ssh:ro")
+if [[ -d "$HOME/.ssh" ]]; then
+  # Keys are read-only; known_hosts is writable so a host is only asked about once.
+  touch "$HOME/.ssh/known_hosts"
+  args+=(--volume "$HOME/.ssh:/home/barekube/.ssh:ro" --volume "$HOME/.ssh/known_hosts:/home/barekube/.ssh/known_hosts")
+fi
 if [[ -n "${SSH_AUTH_SOCK:-}" && -S "${SSH_AUTH_SOCK}" ]]; then
   args+=(--volume "$SSH_AUTH_SOCK:/ssh-agent" --env SSH_AUTH_SOCK=/ssh-agent)
 fi
