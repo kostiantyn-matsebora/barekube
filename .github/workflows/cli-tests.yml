@@ -74,7 +74,7 @@ jobs:
         run: ansible-lint
       - name: Syntax check
         working-directory: orchestration/ansible
-        run: ansible-playbook -i inventory.example.yml site.yml --syntax-check
+        run: ansible-playbook -i inventory.example.yml playbooks/site.yml --syntax-check
       - name: The release archive of the playbooks works
         run: |
           orchestration/package.sh "$RUNNER_TEMP/pack"
