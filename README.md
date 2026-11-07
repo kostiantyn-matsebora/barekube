@@ -25,18 +25,35 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
 
 ## Quick start: build a cluster
 
-```shell
-curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
-cd barekube-ansible
-cp inventory.example.yml inventory.yml     # your machines
-./play.sh
-```
+1. Install [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) or [Docker](https://docs.docker.com/get-docker/) on your computer, and make sure you can log in to your machines with [SSH](https://www.openssh.com/).
 
-- **Needs:** [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) or [Docker](https://docs.docker.com/get-docker/) on your computer, and [SSH](https://www.openssh.com/) access to the machines
-- **Result:** a cluster, added to `~/.kube/config` as the current context: `kubectl get nodes` works right away
-- **Again:** run `./play.sh` to add machines or change settings
-- **More:** [settings, removing nodes, teardown](orchestration/ansible/README.md)
-- **One node by hand:** [use the CLI](#installing-the-cli)
+2. Download the playbooks:
+
+   ```shell
+   curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
+   cd barekube-ansible
+   ```
+
+3. Put your machines in the inventory, as `masters` and `agents`:
+
+   ```shell
+   cp inventory.example.yml inventory.yml
+   nano inventory.yml
+   ```
+
+4. Build the cluster (log in with a password instead of a key: `./play.sh -k`):
+
+   ```shell
+   ./play.sh
+   ```
+
+5. Use it. The cluster is now the current context in `~/.kube/config`:
+
+   ```shell
+   kubectl get nodes
+   ```
+
+Run `./play.sh` again to add machines or change settings. More: [settings, removing nodes, teardown](orchestration/ansible/README.md). To set up one node by hand, [use the CLI](#installing-the-cli).
 
 ## Installing the CLI
 
