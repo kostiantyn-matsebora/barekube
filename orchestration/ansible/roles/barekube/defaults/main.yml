@@ -22,7 +22,9 @@ barekube_gvisor_default: false
 barekube_address: "{{ ansible_host | default(inventory_hostname) }}"
 # Where nodes join. The first master by default; set it to your own virtual IP
 # or load balancer if you have one. barekube installs none.
-barekube_join_endpoint: "https://{{ hostvars[groups['masters'][0]].barekube_address }}:6443"
+barekube_join_endpoint: >-
+  https://{{ hostvars[groups['masters'][0]].barekube_address
+  | default(hostvars[groups['masters'][0]].ansible_host | default(groups['masters'][0])) }}:6443
 # Extra names for the API server certificate (the first master's address and
 # the join endpoint's host are always included).
 barekube_tls_san: []
