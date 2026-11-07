@@ -39,7 +39,7 @@ The CLI is written with [bashly](https://bashly.dev) under `cli/`:
    cli/tests/run.sh --coverage
    ```
 
-5. Open a pull request. CI runs the tests and fails when the committed release differs from a fresh regeneration.
+5. Open a pull request. CI runs the tests, fails when the committed release differs from a fresh regeneration, and runs the installation steps from the README to check that they still install a working barekube. You can run that check yourself with `cli/tests/readme_install.sh local`.
 
 Pull requests are squash-merged and the branch is deleted after the merge.
 

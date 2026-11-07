@@ -74,3 +74,21 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" barekube SHA256SUMS barekube.sigstore.json \
             --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+
+  # Follows the README as a new user would: downloads the published release,
+  # installs it, runs it and verifies its checksum and signature.
+  verify-install:
+    name: README instructions work on the published release
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Run the installation and verification instructions
+        run: cli/tests/readme_install.sh release "$GITHUB_REF_NAME"
