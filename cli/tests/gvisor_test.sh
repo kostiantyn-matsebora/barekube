@@ -314,6 +314,7 @@ test_publish_with_off_removes_the_default_policy() {
   run publish_gvisor_to_cluster off
   assert_called "sudo rm -f $POLICY"
   assert_called "sudo k3s kubectl delete mutatingadmissionpolicybinding,mutatingadmissionpolicy barekube-gvisor-default --ignore-not-found"
+  assert_called "sudo k3s kubectl --namespace kube-system delete addons.k3s.cattle.io barekube-gvisor-default --ignore-not-found"
 }
 
 test_publish_with_off_deletes_the_policy_even_without_the_file() {
@@ -328,6 +329,12 @@ test_publish_with_off_reports_a_failed_policy_deletion() {
   mock_fail sudo 'k3s*'
   run publish_gvisor_to_cluster off
   assert_output_contains "Failed to remove the gVisor default policy"
+}
+
+test_publish_with_off_reports_a_failed_manifest_cleanup() {
+  sudo() { echo "sudo $*" >>"$CALLS"; [[ "$*" == *addons.k3s.cattle.io* ]] && return 1; return 0; }
+  run publish_gvisor_to_cluster off
+  assert_output_contains "Failed to forget the gVisor default policy manifest"
 }
 
 test_publish_does_not_restart_k3s() {

@@ -216,6 +216,12 @@ publish_gvisor_to_cluster() {
                 "Failed to remove the gVisor default policy" \
                 k3s kubectl delete mutatingadmissionpolicybinding,mutatingadmissionpolicy \
                 barekube-gvisor-default --ignore-not-found
+            # k3s remembers the manifest by its checksum and would not apply the
+            # same file again when the default is switched back on.
+            run_privileged "Forgetting the gVisor default policy manifest..." \
+                "Failed to forget the gVisor default policy manifest" \
+                k3s kubectl --namespace kube-system delete addons.k3s.cattle.io \
+                barekube-gvisor-default --ignore-not-found
             ;;
     esac
     return 0
