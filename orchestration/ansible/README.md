@@ -26,6 +26,8 @@ The hosts under `masters` and `agents` are your cluster. The first master is the
 | `barekube_tls_san` | `[]` | Extra names for the API server certificate. |
 | `barekube_join_endpoint` | the first master | Where nodes join. Set it to your own virtual IP or load balancer if you have one; barekube does not install one. |
 | `barekube_extra_args` | empty | Anything else to pass to the k3s server. |
+| `barekube_kubeconfig` | `~/.kube/config` | The kubeconfig the cluster is added to, as the current context `barekube-default`. Your other clusters in it are kept. |
+| `barekube_cluster_name` | `default` | Names the context, `barekube-<name>`. Set it if you build more than one cluster. |
 
 The join token is read from the first master into memory and handed to the other nodes through the environment. It is never written to a file or shown in the output.
 
@@ -38,7 +40,7 @@ The join token is read from the first master into memory and handed to the other
 # Take a node out: drain it, delete it from Kubernetes (a master also leaves etcd) and uninstall k3s from it
 ./play.sh remove-node.yml -e barekube_node=agent-2
 
-# Remove k3s from every node. This destroys the cluster and its data.
+# Remove k3s from every node and the cluster from your kubeconfig. This destroys the cluster and its data.
 ./play.sh uninstall.yml -e barekube_confirm_uninstall=yes
 ```
 

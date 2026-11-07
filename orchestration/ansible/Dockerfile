@@ -13,5 +13,9 @@ COPY requirements.txt requirements.yml /tmp/
 RUN pip install --no-cache-dir -r /tmp/requirements.txt \
     && ansible-galaxy collection install -r /tmp/requirements.yml --collections-path /usr/share/ansible/collections
 
+# play.sh runs as your user id: give it a home directory and a passwd entry.
+RUN mkdir -p /home/barekube && chmod 777 /home/barekube && chmod 666 /etc/passwd
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
 WORKDIR /ansible
-ENTRYPOINT ["ansible-playbook"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

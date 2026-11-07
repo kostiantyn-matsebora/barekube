@@ -32,7 +32,7 @@ cp inventory.example.yml inventory.yml     # your machines
 ```
 
 - **Needs:** [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) or [Docker](https://docs.docker.com/get-docker/) on your computer, and [SSH](https://www.openssh.com/) access to the machines
-- **Result:** a cluster, and its kubeconfig in `~/.barekube/default/kubeconfig`
+- **Result:** a cluster, added to `~/.kube/config` as the current context: `kubectl get nodes` works right away
 - **Again:** run `./play.sh` to add machines or change settings
 - **More:** [settings, removing nodes, teardown](orchestration/ansible/README.md)
 - **One node by hand:** [use the CLI](#installing-the-cli)
