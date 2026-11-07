@@ -12,6 +12,6 @@ echo_info "Joining cluster at: $SERVER_URL"
 echo_info "Additional arguments: $ADDITIONAL_ARGS"
 
 install_k3s_master "$SERVER_URL" "$ADDITIONAL_ARGS"
-setup_gvisor
+setup_gvisor "${args[--gvisor-default]:+on}"
 echo_final "Failed to install k3s master node." "Another k3s master node installed successfully."
 report_state "installed"

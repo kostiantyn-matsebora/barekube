@@ -133,3 +133,22 @@ barekube install agent-node  --yes --server https://192.168.1.10:6443
 ```
 
 When an install command finishes it prints `installed` or `already installed`, so a script can tell whether anything changed.
+
+## gVisor as the default
+
+barekube installs two `RuntimeClass` objects on the control plane: `gvisor` (the sandbox) and `runc` (the normal runtime). A pod picks one with `runtimeClassName`. A pod that names none runs with the normal runtime.
+
+To put every new pod in the gVisor sandbox unless it says otherwise, add `--gvisor-default` when you install a control-plane node, or switch it later on any control-plane node:
+
+```shell
+barekube install initial-master --gvisor-default
+barekube install gvisor --default       # a cluster that is already running
+barekube install gvisor --no-default    # and back
+```
+
+This installs a Kubernetes admission policy that sets `runtimeClassName: gvisor` on new pods that name no class. It needs a Kubernetes version that has `MutatingAdmissionPolicy`. It leaves alone:
+
+- the `kube-system`, `kube-public`, `kube-node-lease` and `longhorn-system` namespaces;
+- pods that use the host network, PID or IPC namespaces, and pods with a privileged container.
+
+gVisor can't run those. For any other pod that needs the host, set `runtimeClassName: runc`.

@@ -173,11 +173,6 @@ check_nodeport_on_every_node() {
 
 check_gvisor_runtime() {
   kc apply -f - <<MANIFEST
-apiVersion: node.k8s.io/v1
-kind: RuntimeClass
-metadata: {name: gvisor}
-handler: runsc
----
 apiVersion: v1
 kind: Pod
 metadata: {name: sandboxed}
@@ -201,7 +196,102 @@ MANIFEST
   kc delete pod sandboxed --wait=false >/dev/null
 }
 
-# ------------------------------------------------------ Longhorn prerequisites
+check_runtime_classes_exist() {
+  expect_eq "$(kc get runtimeclass gvisor -o 'jsonpath={.handler}')" runsc "handler of the gvisor RuntimeClass" || return 1
+  expect_eq "$(kc get runtimeclass runc -o 'jsonpath={.handler}')" runc "handler of the runc RuntimeClass" || return 1
+}
+
+# Creates a pod that names no RuntimeClass and prints the class it ended up with.
+class_of_a_plain_pod() {
+  kc delete pod plain --ignore-not-found --wait=true >/dev/null
+  kc run plain --image="$BUSYBOX" --restart=Never --command -- sleep 600 >/dev/null || return 1
+  kc get pod plain -o 'jsonpath={.spec.runtimeClassName}'
+  kc delete pod plain --wait=false >/dev/null
+}
+
+# What dmesg says in a pod that names no RuntimeClass. gVisor answers with its
+# own banner; runc refuses dmesg to unprivileged pods.
+dmesg_in_plain_pod() {
+  kc delete pod plain --ignore-not-found --wait=true >/dev/null
+  kc run plain --image="$BUSYBOX" --restart=Never --command -- sleep 600 >/dev/null
+  kc wait --for=condition=Ready pod/plain --timeout=240s >/dev/null || { kc describe pod plain | tail -20; return 1; }
+  kc exec plain -- dmesg 2>&1 || true
+  kc delete pod plain --wait=true >/dev/null
+}
+
+is_sandboxed() { [[ "${1,,}" == *gvisor* ]]; }
+
+plain_pod_gets_class() { [[ "$(class_of_a_plain_pod)" == "$1" ]]; }
+
+check_default_follows_the_setting() {
+  local want=""
+  [[ "$GVISOR_DEFAULT" == "true" ]] && want=gvisor
+  wait_for 120 "a pod without a RuntimeClass gets '${want:-none}'" plain_pod_gets_class "$want" || return 1
+  if [[ "$GVISOR_DEFAULT" == "true" ]]; then
+    is_sandboxed "$(dmesg_in_plain_pod)" || { log "a plain pod is not sandboxed although gVisor is the default"; return 1; }
+  else
+    ! is_sandboxed "$(dmesg_in_plain_pod)" || { log "a plain pod is sandboxed although gVisor is not the default"; return 1; }
+  fi
+}
+
+check_system_pods_are_left_alone() {
+  expect_eq "$(kc get pods -n kube-system -o 'jsonpath={.items[*].spec.runtimeClassName}')" "" \
+    "RuntimeClasses set on kube-system pods" || return 1
+}
+
+# Pods that need the host cannot run in a sandbox; the default must skip them.
+check_host_pods_are_left_alone() {
+  kc delete pod host-net --ignore-not-found --wait=true >/dev/null
+  kc run host-net --image="$BUSYBOX" --restart=Never --overrides='{"spec":{"hostNetwork":true}}' \
+    --command -- sleep 600 >/dev/null || return 1
+  kc run privileged --image="$BUSYBOX" --restart=Never \
+    --overrides='{"spec":{"containers":[{"name":"privileged","image":"'"$BUSYBOX"'","command":["sleep","600"],"securityContext":{"privileged":true}}]}}' >/dev/null || return 1
+  expect_eq "$(kc get pod host-net -o 'jsonpath={.spec.runtimeClassName}')" "" "RuntimeClass of a host-network pod" || return 1
+  expect_eq "$(kc get pod privileged -o 'jsonpath={.spec.runtimeClassName}')" "" "RuntimeClass of a privileged pod" || return 1
+  kc delete pod host-net privileged --wait=false >/dev/null
+}
+
+check_runc_runtime_class_opts_out() {
+  kc apply -f - <<MANIFEST
+apiVersion: v1
+kind: Pod
+metadata: {name: host-runtime}
+spec:
+  runtimeClassName: runc
+  nodeName: agent-1
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: $BUSYBOX
+      command: [sleep, "600"]
+MANIFEST
+  kc wait --for=condition=Ready pod/host-runtime --timeout=240s || { kc describe pod host-runtime | tail -20; return 1; }
+  local banner
+  banner="$(kc exec host-runtime -- dmesg 2>&1 || true)"
+  ! is_sandboxed "$banner" || { log "a runc pod is sandboxed"; return 1; }
+  kc delete pod host-runtime --wait=false >/dev/null
+}
+
+# Switches the default to the opposite of the cluster's setting from a master
+# with the install gvisor flags, checks it takes effect, then restores it.
+check_gvisor_default_can_be_switched() {
+  local flip restore flipped
+  if [[ "$GVISOR_DEFAULT" == "true" ]]; then
+    flip=--no-default restore=--default flipped=""
+  else
+    flip=--default restore=--no-default flipped=gvisor
+  fi
+  local original=""
+  [[ "$GVISOR_DEFAULT" == "true" ]] && original=gvisor
+  node master-1 barekube install gvisor "$flip" >/dev/null
+  wait_for 180 "a pod without a RuntimeClass gets '${flipped:-none}' after $flip" plain_pod_gets_class "$flipped" || return 1
+  node master-1 barekube install gvisor "$restore" >/dev/null
+  wait_for 180 "a pod without a RuntimeClass gets '${original:-none}' after $restore" plain_pod_gets_class "$original" || return 1
+}
+
+check_an_agent_refuses_the_gvisor_default() {
+  ! node agent-1 barekube install gvisor --default >/dev/null 2>&1 || { log "an agent accepted --default"; return 1; }
+}
 
 runsc_runtime_stanzas() {
   node "$1" sh -c "grep -c 'containerd.runtimes.runsc\\]' /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl"
@@ -305,6 +395,13 @@ check "services and DNS resolve" check_service_and_dns
 check "a NodePort answers on every node" check_nodeport_on_every_node
 check "gVisor is installed and registered with k3s on every node" check_gvisor_is_installed_on_every_node
 check "a pod runs sandboxed by gVisor" check_gvisor_runtime
+check "the gvisor and runc RuntimeClasses exist" check_runtime_classes_exist
+check "pods without a RuntimeClass follow the cluster's gVisor default ($GVISOR_DEFAULT)" check_default_follows_the_setting
+check "system pods are left out of the gVisor default" check_system_pods_are_left_alone
+check "pods that need the host are left out of the gVisor default" check_host_pods_are_left_alone
+check "a runc RuntimeClass opts a pod out of gVisor" check_runc_runtime_class_opts_out
+check "the gVisor default can be switched from a master, both ways" check_gvisor_default_can_be_switched
+check "an agent refuses the gVisor default" check_an_agent_refuses_the_gvisor_default
 check "Longhorn prerequisites are in place on every node" check_longhorn_prerequisites
 check "re-running the gVisor install keeps the cluster healthy" check_gvisor_install_command_can_be_rerun
 check "re-running the Longhorn dependencies install works" check_longhorn_install_command_can_be_rerun

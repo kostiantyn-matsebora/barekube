@@ -8,6 +8,9 @@ source "$CLI_DIR/src/gvisor.sh"
 
 CONFIG_DIR=/var/lib/rancher/k3s/agent/etc/containerd
 KEYRING=/usr/share/keyrings/gvisor-archive-keyring.gpg
+MANIFESTS=/var/lib/rancher/k3s/server/manifests
+CLASSES=$MANIFESTS/barekube-gvisor.yaml
+POLICY=$MANIFESTS/barekube-gvisor-default.yaml
 
 setup() {
   mock sudo curl dpkg
@@ -214,6 +217,157 @@ test_register_gvisor_reports_a_template_directory_it_cannot_create() {
   run register_gvisor_to_k3s
   assert_output_contains "Failed to create $CONFIG_DIR"
   refute_called_matching '^sudo tee'
+}
+
+# ----------------------------------------------------- cluster-level objects
+
+test_runtime_classes_manifest_defines_gvisor_and_runc() {
+  run gvisor_runtime_classes_manifest
+  assert_output_contains "name: gvisor"
+  assert_output_contains "handler: runsc"
+  assert_output_contains "name: runc"
+  assert_output_contains "handler: runc"
+}
+
+test_default_policy_sets_the_gvisor_runtime_class() {
+  run gvisor_default_policy_manifest
+  assert_output_contains "kind: MutatingAdmissionPolicy"
+  assert_output_contains "kind: MutatingAdmissionPolicyBinding"
+  assert_output_contains '"/spec/runtimeClassName", value: "gvisor"'
+}
+
+test_default_policy_leaves_alone_pods_that_name_a_class_or_need_the_host() {
+  run gvisor_default_policy_manifest
+  assert_output_contains "!has(object.spec.runtimeClassName)"
+  assert_output_contains "hostNetwork"
+  assert_output_contains "privileged"
+}
+
+test_default_policy_skips_the_system_namespaces() {
+  run gvisor_default_policy_manifest
+  assert_output_contains "kube-system"
+  assert_output_contains "longhorn-system"
+}
+
+test_write_k3s_manifest_writes_a_new_file() {
+  mock_fail sudo 'cmp*'
+  run write_k3s_manifest "$CLASSES" gvisor_runtime_classes_manifest
+  assert_status 0
+  assert_called "sudo mkdir -p $MANIFESTS"
+  assert_called "sudo tee $CLASSES"
+  assert_file_contains "$STDIN_LOG" "handler: runsc"
+}
+
+test_write_k3s_manifest_leaves_an_identical_file_alone() {
+  run write_k3s_manifest "$CLASSES" gvisor_runtime_classes_manifest
+  assert_status 1
+  refute_called_matching '^sudo tee'
+}
+
+test_write_k3s_manifest_reports_a_failed_write() {
+  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in cmp | tee) return 1 ;; esac; return 0; }
+  run write_k3s_manifest "$CLASSES" gvisor_runtime_classes_manifest
+  assert_output_contains "Failed to write $CLASSES"
+}
+
+test_write_k3s_manifest_reports_a_failed_directory() {
+  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in cmp | mkdir) return 1 ;; esac; return 0; }
+  run write_k3s_manifest "$CLASSES" gvisor_runtime_classes_manifest
+  assert_output_contains "Failed to create $MANIFESTS"
+}
+
+test_remove_k3s_manifest_removes_an_existing_file() {
+  run remove_k3s_manifest "$POLICY"
+  assert_status 0
+  assert_called "sudo rm -f $POLICY"
+}
+
+test_remove_k3s_manifest_does_nothing_without_the_file() {
+  mock_fail sudo 'test*'
+  run remove_k3s_manifest "$POLICY"
+  assert_status 1
+  refute_called_matching '^sudo rm'
+}
+
+test_remove_k3s_manifest_reports_a_failed_removal() {
+  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in rm) return 1 ;; esac; return 0; }
+  run remove_k3s_manifest "$POLICY"
+  assert_output_contains "Failed to remove $POLICY"
+}
+
+test_publish_on_a_server_adds_the_runtime_classes_only() {
+  mock_fail sudo 'cmp*'
+  run publish_gvisor_to_cluster ""
+  assert_status 0
+  assert_called "sudo tee $CLASSES"
+  refute_called "sudo tee $POLICY"
+}
+
+test_publish_with_on_adds_the_default_policy() {
+  mock_fail sudo 'cmp*'
+  run publish_gvisor_to_cluster on
+  assert_called "sudo tee $CLASSES"
+  assert_called "sudo tee $POLICY"
+}
+
+test_publish_with_off_removes_the_default_policy() {
+  run publish_gvisor_to_cluster off
+  assert_called "sudo rm -f $POLICY"
+  assert_called "sudo k3s kubectl delete mutatingadmissionpolicybinding,mutatingadmissionpolicy barekube-gvisor-default --ignore-not-found"
+  assert_called "sudo k3s kubectl --namespace kube-system delete addons.k3s.cattle.io barekube-gvisor-default --ignore-not-found"
+}
+
+test_publish_with_off_deletes_the_policy_even_without_the_file() {
+  mock_fail sudo 'test*'
+  run publish_gvisor_to_cluster off
+  assert_status 0
+  refute_called_matching '^sudo rm'
+  assert_called_matching "^sudo k3s kubectl delete "
+}
+
+test_publish_with_off_reports_a_failed_policy_deletion() {
+  mock_fail sudo 'k3s*'
+  run publish_gvisor_to_cluster off
+  assert_output_contains "Failed to remove the gVisor default policy"
+}
+
+test_publish_with_off_reports_a_failed_manifest_cleanup() {
+  sudo() { echo "sudo $*" >>"$CALLS"; [[ "$*" == *addons.k3s.cattle.io* ]] && return 1; return 0; }
+  run publish_gvisor_to_cluster off
+  assert_output_contains "Failed to forget the gVisor default policy manifest"
+}
+
+test_publish_does_not_restart_k3s() {
+  mock_fail sudo 'cmp*'
+  run publish_gvisor_to_cluster on
+  refute_called_matching 'systemctl'
+}
+
+test_publish_on_an_agent_does_nothing_without_a_mode() {
+  K3S_SYSTEMD_DIR="$TEST_TMP/systemd"; mkdir -p "$K3S_SYSTEMD_DIR"; touch "$K3S_SYSTEMD_DIR/k3s-agent.service"
+  run publish_gvisor_to_cluster ""
+  assert_status 0
+  refute_called_matching '^sudo'
+}
+
+test_publish_on_an_agent_refuses_a_default() {
+  K3S_SYSTEMD_DIR="$TEST_TMP/systemd"; mkdir -p "$K3S_SYSTEMD_DIR"; touch "$K3S_SYSTEMD_DIR/k3s-agent.service"
+  run publish_gvisor_to_cluster on
+  assert_status 1
+  assert_output_contains "run this on a control-plane node"
+  refute_called_matching '^sudo'
+}
+
+test_setup_gvisor_publishes_with_the_mode() {
+  mock_fail sudo 'cmp*'
+  run setup_gvisor on
+  assert_called "sudo tee $POLICY"
+}
+
+test_setup_gvisor_stops_when_an_agent_is_asked_for_the_default() {
+  K3S_SYSTEMD_DIR="$TEST_TMP/systemd"; mkdir -p "$K3S_SYSTEMD_DIR"; touch "$K3S_SYSTEMD_DIR/k3s-agent.service"
+  run setup_gvisor on
+  assert_status 1
 }
 
 test_setup_gvisor_installs_then_registers() {

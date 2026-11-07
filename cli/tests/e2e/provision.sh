@@ -41,6 +41,7 @@ join_agent() {
     barekube install agent-node --yes --server "https://$FIRST_IP:6443"
 }
 
+log "gVisor is the default for pods: $GVISOR_DEFAULT"
 group "Create the five nodes"
 parallel_nodes launch_node "${NODES[@]}"
 endgroup
@@ -53,7 +54,7 @@ group "Initial master"
 FIRST_IP="$(node_ip master-1)"
 log "master-1 is $FIRST_IP"
 install_ok master-1 lxc exec master-1 -- \
-  barekube install initial-master --yes --tls-san "$FIRST_IP" "${K3S_FLAGS[@]}"
+  barekube install initial-master --yes --tls-san "$FIRST_IP" "${K3S_FLAGS[@]}" "${GVISOR_FLAGS[@]}"
 TOKEN="$(node master-1 cat /var/lib/rancher/k3s/server/token)"
 echo "::add-mask::$TOKEN"
 wait_for 300 "master-1 is Ready" node_ready master-1
@@ -64,7 +65,7 @@ for master in master-2 master-3; do
   group "Join $master"
   install_ok "$master" lxc exec "$master" --env K3S_TOKEN="$TOKEN" -- \
     barekube install master-node --yes --server "https://$FIRST_IP:6443" \
-    --tls-san "$FIRST_IP" "${K3S_FLAGS[@]}"
+    --tls-san "$FIRST_IP" "${K3S_FLAGS[@]}" "${GVISOR_FLAGS[@]}"
   wait_for 300 "$master is Ready" node_ready "$master"
   endgroup
 done

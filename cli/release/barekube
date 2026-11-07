@@ -135,6 +135,11 @@ barekube_install_initial_master_usage() {
     echo
 
     # :flag.usage
+    printf "  %s\n" "$(magenta "--gvisor-default")"
+    printf "    Make gVisor the default for pods that name no RuntimeClass (cluster-wide)\n"
+    echo
+
+    # :flag.usage
     printf "  %s\n" "$(magenta "--yes, -y")"
     printf "    Do not prompt; fail when a required value is missing\n"
     echo
@@ -179,6 +184,11 @@ barekube_install_master_node_usage() {
     # :flag.usage
     printf "  %s\n" "$(magenta "--reinstall")"
     printf "    Reinstall k3s\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--gvisor-default")"
+    printf "    Make gVisor the default for pods that name no RuntimeClass (cluster-wide)\n"
     echo
 
     # :flag.usage
@@ -272,13 +282,26 @@ barekube_install_gvisor_usage() {
   printf "barekube install gvisor - Install and configure gVisor for existing k3s node\n\n"
 
   printf "%s\n" "$(bold "Usage:")"
-  printf "  barekube install gvisor\n"
+  printf "  barekube install gvisor [OPTIONS]\n"
   printf "  barekube install gvisor --help | -h\n"
   echo
 
   # :command.long_usage
   if [[ -n "$long_usage" ]]; then
     printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_flags
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--default")"
+    printf "    Make gVisor the default for pods that name no RuntimeClass (cluster-wide)\n"
+    printf "    %s\n" "Conflicts: --no-default"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--no-default")"
+    printf "    Stop making gVisor the default for pods that name no RuntimeClass\n"
+    printf "    %s\n" "Conflicts: --default"
+    echo
 
     # :command.usage_fixed_flags
     printf "  %s\n" "$(magenta "--help, -h")"
@@ -711,6 +734,11 @@ GVISOR_KEYRING="/usr/share/keyrings/gvisor-archive-keyring.gpg"
 GVISOR_REPO_URL="https://storage.googleapis.com/gvisor/releases"
 GVISOR_APT_SOURCE="/etc/apt/sources.list.d/gvisor.list"
 K3S_CONTAINERD_DIR="/var/lib/rancher/k3s/agent/etc/containerd"
+# k3s applies every manifest in this directory on the server nodes, and removes
+# nothing when a file is deleted. The files below belong to barekube.
+K3S_MANIFESTS_DIR="/var/lib/rancher/k3s/server/manifests"
+GVISOR_RUNTIMECLASSES_MANIFEST="$K3S_MANIFESTS_DIR/barekube-gvisor.yaml"
+GVISOR_DEFAULT_MANIFEST="$K3S_MANIFESTS_DIR/barekube-gvisor-default.yaml"
 
 install_gvisor_prerequisites() {
     run_privileged "Installing gVisor dependencies..." "Failed to install gVisor dependencies" \
@@ -780,6 +808,101 @@ add_runsc_to_template() {
     return 0
 }
 
+# The RuntimeClasses pods use to pick a runtime: gvisor for the sandbox, runc
+# to stay out of it.
+gvisor_runtime_classes_manifest() {
+    cat <<'EOF'
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+handler: runsc
+---
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: runc
+handler: runc
+EOF
+}
+
+# Sets runtimeClassName: gvisor on every new pod that names no RuntimeClass.
+# Pods that need the host (host namespaces, privileged containers) and the
+# system namespaces are left alone: gVisor cannot run them.
+gvisor_default_policy_manifest() {
+    cat <<'EOF'
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: barekube-gvisor-default
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+  matchConditions:
+    - name: names-no-runtime-class
+      expression: "!has(object.spec.runtimeClassName)"
+    - name: does-not-use-host-namespaces
+      expression: >-
+        !(has(object.spec.hostNetwork) && object.spec.hostNetwork) &&
+        !(has(object.spec.hostPID) && object.spec.hostPID) &&
+        !(has(object.spec.hostIPC) && object.spec.hostIPC)
+    - name: runs-no-privileged-container
+      expression: >-
+        !(object.spec.containers + (has(object.spec.initContainers) ? object.spec.initContainers : []))
+        .exists(c, has(c.securityContext) && has(c.securityContext.privileged) && c.securityContext.privileged)
+  mutations:
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: >-
+          [JSONPatch{op: "add", path: "/spec/runtimeClassName", value: "gvisor"}]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: barekube-gvisor-default
+spec:
+  policyName: barekube-gvisor-default
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public, kube-node-lease, longhorn-system]
+EOF
+}
+
+# Writes a manifest for k3s to apply.
+# Returns 0 when it wrote the file, 1 when the file was already as it should be.
+# Usage: write_k3s_manifest FILE CONTENT_FUNCTION
+write_k3s_manifest() {
+    local FILE="$1" CONTENT="$2"
+    "$CONTENT" | sudo cmp -s - "$FILE" && return 1
+    run_privileged "Preparing $K3S_MANIFESTS_DIR..." "Failed to create $K3S_MANIFESTS_DIR" \
+        mkdir -p "$K3S_MANIFESTS_DIR"
+    echo_info "Writing $FILE..."
+    "$CONTENT" | sudo tee "$FILE" > /dev/null
+    exit_if_error "Failed to write $FILE"
+    return 0
+}
+
+# Returns 0 when it removed the manifest, 1 when there was none.
+# Usage: remove_k3s_manifest FILE
+remove_k3s_manifest() {
+    sudo test -f "$1" || return 1
+    echo_info "Removing $1..."
+    sudo rm -f "$1"
+    exit_if_error "Failed to remove $1"
+    return 0
+}
+
+# Registers the runsc runtime with containerd on this node; k3s restarts once
+# if anything changed.
 register_gvisor_to_k3s() {
     local SERVICE CHANGED=1
     SERVICE="$(k3s_service_name)"
@@ -798,10 +921,47 @@ register_gvisor_to_k3s() {
     run_privileged "Restarting $SERVICE..." "Failed to register gVisor to k3s" systemctl restart "$SERVICE"
 }
 
-# Installs gVisor and wires it into k3s - the pair every node install needs.
+# Makes the gvisor and runc RuntimeClasses available in the cluster and, when
+# asked, makes gVisor the default for pods that name no RuntimeClass. These are
+# cluster objects, applied by a server node; agents have nothing to do here.
+# Usage: publish_gvisor_to_cluster [on|off]   (empty leaves the default as it is)
+publish_gvisor_to_cluster() {
+    if [[ "$(k3s_service_name)" != "k3s" ]]
+    then
+        if [[ -n "$1" ]]
+        then
+            echo_error "The gVisor default is a cluster setting: run this on a control-plane node, not an agent."
+            return 1
+        fi
+        return 0
+    fi
+    write_k3s_manifest "$GVISOR_RUNTIMECLASSES_MANIFEST" gvisor_runtime_classes_manifest
+    case "$1" in
+        on) write_k3s_manifest "$GVISOR_DEFAULT_MANIFEST" gvisor_default_policy_manifest ;;
+        off)
+            # k3s does not delete what a removed manifest created.
+            remove_k3s_manifest "$GVISOR_DEFAULT_MANIFEST"
+            run_privileged "Removing the gVisor default policy from the cluster..." \
+                "Failed to remove the gVisor default policy" \
+                k3s kubectl delete mutatingadmissionpolicybinding,mutatingadmissionpolicy \
+                barekube-gvisor-default --ignore-not-found
+            # k3s remembers the manifest by its checksum and would not apply the
+            # same file again when the default is switched back on.
+            run_privileged "Forgetting the gVisor default policy manifest..." \
+                "Failed to forget the gVisor default policy manifest" \
+                k3s kubectl --namespace kube-system delete addons.k3s.cattle.io \
+                barekube-gvisor-default --ignore-not-found
+            ;;
+    esac
+    return 0
+}
+
+# Installs gVisor and wires it into k3s and the cluster - what every node install needs.
+# Usage: setup_gvisor [on|off]
 setup_gvisor() {
     install_gvisor
     register_gvisor_to_k3s
+    publish_gvisor_to_cluster "$1" || exit 1
 }
 
 # ./src/k3s.sh
@@ -1200,7 +1360,7 @@ barekube_install_initial_master_command() {
   ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
 
   install_k3s_initial_master "${ADDITIONAL_ARGS}"
-  setup_gvisor
+  setup_gvisor "${args[--gvisor-default]:+on}"
   show_k3s_token
   echo_final "Failed to install initial k3s master node." "Initial k3s master node installed successfully."
   report_state "installed"
@@ -1225,7 +1385,7 @@ barekube_install_master_node_command() {
   echo_info "Additional arguments: $ADDITIONAL_ARGS"
 
   install_k3s_master "$SERVER_URL" "$ADDITIONAL_ARGS"
-  setup_gvisor
+  setup_gvisor "${args[--gvisor-default]:+on}"
   echo_final "Failed to install k3s master node." "Another k3s master node installed successfully."
   report_state "installed"
 
@@ -1253,7 +1413,11 @@ barekube_install_agent_node_command() {
 barekube_install_gvisor_command() {
 
   # ./commands/install/gvisor.sh
-  setup_gvisor
+  # shellcheck disable=SC2154
+  GVISOR_DEFAULT_MODE=""
+  [[ -n "${args[--default]:-}" ]] && GVISOR_DEFAULT_MODE="on"
+  [[ -n "${args[--no-default]:-}" ]] && GVISOR_DEFAULT_MODE="off"
+  setup_gvisor "$GVISOR_DEFAULT_MODE"
 
 }
 
@@ -1617,6 +1781,14 @@ barekube_install_initial_master_parse_requirements() {
         ;;
 
       # :flag.case
+      --gvisor-default)
+
+        # :flag.case_no_arg
+        args['--gvisor-default']=1
+        shift
+        ;;
+
+      # :flag.case
       --yes | -y)
 
         # :flag.case_no_arg
@@ -1729,6 +1901,14 @@ barekube_install_master_node_parse_requirements() {
 
         # :flag.case_no_arg
         args['--reinstall']=1
+        shift
+        ;;
+
+      # :flag.case
+      --gvisor-default)
+
+        # :flag.case_no_arg
+        args['--gvisor-default']=1
         shift
         ;;
 
@@ -1928,6 +2108,31 @@ barekube_install_gvisor_parse_requirements() {
   while [[ $# -gt 0 ]]; do
     key="$1"
     case "$key" in
+      # :flag.case
+      --default)
+        # :flag.conflicts
+        if [[ -n "${args['--no-default']:-}" ]]; then
+          printf "conflicting options: %s cannot be used with %s\n" "$key" "--no-default" >&2
+          exit 1
+        fi
+
+        # :flag.case_no_arg
+        args['--default']=1
+        shift
+        ;;
+
+      # :flag.case
+      --no-default)
+        # :flag.conflicts
+        if [[ -n "${args['--default']:-}" ]]; then
+          printf "conflicting options: %s cannot be used with %s\n" "$key" "--default" >&2
+          exit 1
+        fi
+
+        # :flag.case_no_arg
+        args['--no-default']=1
+        shift
+        ;;
 
       -?*)
         printf "invalid option: %s\n" "$key" >&2

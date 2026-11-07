@@ -161,6 +161,40 @@ test_install_agent_node_exports_the_token_for_the_installer() {
   assert_called "K3S_TOKEN=s3cret"
 }
 
+test_install_gvisor_passes_no_mode_by_default() {
+  run barekube_install_gvisor_command
+  assert_calls "setup_gvisor "
+}
+
+test_install_gvisor_default_flag_turns_the_default_on() {
+  args[--default]=1
+  run barekube_install_gvisor_command
+  assert_calls "setup_gvisor on"
+}
+
+test_install_gvisor_no_default_flag_turns_the_default_off() {
+  args[--no-default]=1
+  run barekube_install_gvisor_command
+  assert_calls "setup_gvisor off"
+}
+
+# check_gvisor_default_flag COMMAND_FUNCTION
+check_gvisor_default_flag() {
+  run "$1"
+  assert_called "setup_gvisor "
+  args[--gvisor-default]=1
+  run "$1"
+  assert_called "setup_gvisor on"
+}
+
+test_initial_master_forwards_the_gvisor_default_flag() { check_gvisor_default_flag barekube_install_initial_master_command; }
+test_master_node_forwards_the_gvisor_default_flag() { check_gvisor_default_flag barekube_install_master_node_command; }
+test_agent_node_sets_up_gvisor_without_a_default() {
+  run barekube_install_agent_node_command
+  assert_called "setup_gvisor "
+  refute_called_matching "setup_gvisor on"
+}
+
 test_install_gvisor() {
   run barekube_install_gvisor_command
   assert_status 0

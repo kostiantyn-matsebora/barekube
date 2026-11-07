@@ -11,6 +11,12 @@ MASTERS=(master-1 master-2 master-3)
 AGENTS=(agent-1 agent-2)
 NODES=("${MASTERS[@]}" "${AGENTS[@]}")
 
+# Whether gVisor is the default runtime of the cluster (the matrix of the E2E
+# workflow runs both). The flag goes on every node, so the cluster is uniform.
+GVISOR_DEFAULT="${E2E_GVISOR_DEFAULT:-false}"
+GVISOR_FLAGS=()
+[[ "$GVISOR_DEFAULT" == "true" ]] && GVISOR_FLAGS=(--gvisor-default)
+
 # Disabled on purpose, as in the README examples: the test cluster has no
 # service load balancer or ingress; those belong to the layer above barekube.
 K3S_FLAGS=(--disable servicelb --disable traefik)

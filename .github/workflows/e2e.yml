@@ -18,9 +18,17 @@ concurrency:
 
 jobs:
   cluster:
-    name: Five-node cluster
+    name: Five-node cluster (gVisor default ${{ matrix.gvisor_default }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # The cluster is built twice: with the usual runtime, and with gVisor
+        # as the default runtime of every pod.
+        gvisor_default: [false, true]
+    env:
+      E2E_GVISOR_DEFAULT: ${{ matrix.gvisor_default }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
