@@ -2,9 +2,6 @@ name: CLI tests
 
 on:
   pull_request:
-    paths:
-      - "cli/**"
-      - ".github/workflows/cli-tests.yml"
   push:
     branches: [master]
     paths:
@@ -45,3 +42,14 @@ jobs:
 
       - name: Fail if the committed release differs
         run: git diff --exit-code -- cli/release/barekube
+
+  # The single required status check for branch protection.
+  ci-green:
+    name: ci-green
+    if: always()
+    needs: [test, release-up-to-date]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless every job passed
+        run: |
+          [ "${{ needs.test.result }}" = "success" ] && [ "${{ needs.release-up-to-date.result }}" = "success" ]
