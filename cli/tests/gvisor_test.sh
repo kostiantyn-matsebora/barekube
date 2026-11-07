@@ -8,7 +8,8 @@ source "$CLI_DIR/src/gvisor.sh"
 
 CONFIG_DIR=/var/lib/rancher/k3s/agent/etc/containerd
 KEYRING=/usr/share/keyrings/gvisor-archive-keyring.gpg
-DEFAULT_CONFIG=/etc/rancher/k3s/config.yaml.d/barekube-gvisor-default.yaml
+DEFAULT_V2=$CONFIG_DIR/config.toml.d/barekube-gvisor-default.toml
+DEFAULT_V3=$CONFIG_DIR/config-v3.toml.d/barekube-gvisor-default.toml
 
 setup() {
   mock sudo curl dpkg
@@ -219,13 +220,25 @@ test_register_gvisor_reports_a_template_directory_it_cannot_create() {
 
 # ------------------------------------------------------------ default runtime
 
-test_set_gvisor_default_on_writes_the_k3s_setting() {
-  mock_fail sudo 'grep*'
+test_runsc_default_config_names_runsc_in_both_config_versions() {
+  run runsc_default_config_v2
+  assert_output_contains '[plugins."io.containerd.grpc.v1.cri".containerd]'
+  assert_output_contains 'default_runtime_name = "runsc"'
+  run runsc_default_config_v3
+  assert_output_contains "[plugins.'io.containerd.cri.v1.runtime'.containerd]"
+  assert_output_contains "default_runtime_name = 'runsc'"
+}
+
+test_set_gvisor_default_on_writes_both_drop_ins() {
+  mock_fail sudo 'cmp*'
   run set_gvisor_default on
   assert_status 0
-  assert_called "sudo mkdir -p /etc/rancher/k3s/config.yaml.d"
-  assert_called "sudo tee $DEFAULT_CONFIG"
-  assert_file_contains "$STDIN_LOG" "default-runtime: runsc"
+  assert_called "sudo mkdir -p $CONFIG_DIR/config.toml.d"
+  assert_called "sudo mkdir -p $CONFIG_DIR/config-v3.toml.d"
+  assert_called "sudo tee $DEFAULT_V2"
+  assert_called "sudo tee $DEFAULT_V3"
+  assert_file_contains "$STDIN_LOG" 'default_runtime_name = "runsc"'
+  assert_file_contains "$STDIN_LOG" "default_runtime_name = 'runsc'"
 }
 
 test_set_gvisor_default_on_does_nothing_when_already_on() {
@@ -234,10 +247,19 @@ test_set_gvisor_default_on_does_nothing_when_already_on() {
   refute_called_matching '^sudo tee'
 }
 
-test_set_gvisor_default_off_removes_the_setting() {
+test_set_gvisor_default_on_rewrites_a_drop_in_with_other_content() {
+  sudo() { echo "sudo $*" >>"$CALLS"; [[ "$1" == cmp && "$*" == *config-v3* ]] && return 1; return 0; }
+  run set_gvisor_default on
+  assert_status 0
+  assert_called "sudo tee $DEFAULT_V3"
+  refute_called "sudo tee $DEFAULT_V2"
+}
+
+test_set_gvisor_default_off_removes_both_drop_ins() {
   run set_gvisor_default off
   assert_status 0
-  assert_called "sudo rm -f $DEFAULT_CONFIG"
+  assert_called "sudo rm -f $DEFAULT_V2"
+  assert_called "sudo rm -f $DEFAULT_V3"
 }
 
 test_set_gvisor_default_off_does_nothing_when_already_off() {
@@ -248,28 +270,35 @@ test_set_gvisor_default_off_does_nothing_when_already_off() {
 }
 
 test_set_gvisor_default_reports_a_failed_write() {
-  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in grep) return 1 ;; tee) return 1 ;; esac; return 0; }
+  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in cmp | tee) return 1 ;; esac; return 0; }
   run set_gvisor_default on
-  assert_output_contains "Failed to write $DEFAULT_CONFIG"
+  assert_output_contains "Failed to write $DEFAULT_V2"
+}
+
+test_set_gvisor_default_reports_a_failed_directory() {
+  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in cmp | mkdir) return 1 ;; esac; return 0; }
+  run set_gvisor_default on
+  assert_output_contains "Failed to create $CONFIG_DIR/config.toml.d"
 }
 
 test_set_gvisor_default_reports_a_failed_removal() {
   sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in rm) return 1 ;; esac; return 0; }
   run set_gvisor_default off
-  assert_output_contains "Failed to remove $DEFAULT_CONFIG"
+  assert_output_contains "Failed to remove $DEFAULT_V2"
 }
 
 test_register_gvisor_with_on_makes_it_the_default_and_restarts_once() {
-  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in grep) [[ "$*" == *barekube-gvisor-default* ]] && return 1; return 0 ;; esac; return 0; }
+  sudo() { echo "sudo $*" >>"$CALLS"; [[ "$1" == cmp ]] && return 1; return 0; }
   run register_gvisor_to_k3s on
   assert_status 0
-  assert_called "sudo tee $DEFAULT_CONFIG"
-  assert_called "sudo systemctl restart k3s"
+  assert_called "sudo tee $DEFAULT_V2"
+  assert_called "sudo tee $DEFAULT_V3"
+  assert_eq 1 "$(grep -c 'systemctl restart' "$CALLS")" "k3s restarts"
 }
 
 test_register_gvisor_restarts_k3s_when_only_the_default_changed() {
   # The templates already hold runsc; only the default switches on.
-  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in grep) [[ "$*" == *barekube-gvisor-default* ]] && return 1; return 0 ;; esac; return 0; }
+  sudo() { echo "sudo $*" >>"$CALLS"; [[ "$1" == cmp ]] && return 1; return 0; }
   run register_gvisor_to_k3s on
   refute_called_matching '^sudo tee -a'
   assert_called "sudo systemctl restart k3s"
@@ -278,7 +307,7 @@ test_register_gvisor_restarts_k3s_when_only_the_default_changed() {
 test_register_gvisor_with_off_removes_the_default() {
   run register_gvisor_to_k3s off
   assert_status 0
-  assert_called "sudo rm -f $DEFAULT_CONFIG"
+  assert_called "sudo rm -f $DEFAULT_V2"
   assert_called "sudo systemctl restart k3s"
 }
 
@@ -289,9 +318,9 @@ test_register_gvisor_without_a_mode_leaves_the_default_alone() {
 }
 
 test_setup_gvisor_passes_the_mode_on() {
-  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in grep) [[ "$*" == *barekube-gvisor-default* ]] && return 1; return 0 ;; esac; return 0; }
+  sudo() { echo "sudo $*" >>"$CALLS"; [[ "$1" == cmp ]] && return 1; return 0; }
   run setup_gvisor on
-  assert_called "sudo tee $DEFAULT_CONFIG"
+  assert_called "sudo tee $DEFAULT_V3"
 }
 
 test_setup_gvisor_installs_then_registers() {

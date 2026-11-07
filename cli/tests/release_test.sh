@@ -25,6 +25,7 @@ make_sudo_stub() {
 #!/bin/sh
 echo "sudo \$*" >>"$CALLS"
 [ "\$1" = grep ] && exit 1
+[ "\$1" = cmp ] && exit 1
 [ -z "$1" ] || echo "$1"
 exit 0
 STUB
@@ -246,20 +247,20 @@ test_install_gvisor_default_and_no_default_cannot_be_combined() {
 test_install_gvisor_default_writes_the_k3s_setting() {
   run barekube_cli install gvisor --default
   assert_status 0
-  assert_called "sudo tee /etc/rancher/k3s/config.yaml.d/barekube-gvisor-default.yaml"
+  assert_called "sudo tee /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.d/barekube-gvisor-default.toml"
   assert_called "sudo systemctl restart k3s"
 }
 
 test_install_gvisor_no_default_removes_the_k3s_setting() {
   run barekube_cli install gvisor --no-default
   assert_status 0
-  assert_called "sudo rm -f /etc/rancher/k3s/config.yaml.d/barekube-gvisor-default.yaml"
+  assert_called "sudo rm -f /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.d/barekube-gvisor-default.toml"
 }
 
 test_install_agent_node_can_make_gvisor_the_default() {
   K3S_TOKEN=s3cret run barekube_cli install agent-node --reinstall --yes --server https://10.0.0.1:6443 --gvisor-default
   assert_status 0
-  assert_called "sudo tee /etc/rancher/k3s/config.yaml.d/barekube-gvisor-default.yaml"
+  assert_called "sudo tee /var/lib/rancher/k3s/agent/etc/containerd/config.toml.d/barekube-gvisor-default.toml"
 }
 
 test_install_gvisor_installs_and_registers_the_runtime() {

@@ -5,10 +5,14 @@ GVISOR_KEYRING="/usr/share/keyrings/gvisor-archive-keyring.gpg"
 GVISOR_REPO_URL="https://storage.googleapis.com/gvisor/releases"
 GVISOR_APT_SOURCE="/etc/apt/sources.list.d/gvisor.list"
 K3S_CONTAINERD_DIR="/var/lib/rancher/k3s/agent/etc/containerd"
-# k3s merges every file in this directory into its configuration. The file
-# belongs to barekube, so the default can be switched on and off cleanly.
-K3S_CONFIG_DIR="/etc/rancher/k3s/config.yaml.d"
-GVISOR_DEFAULT_CONFIG="$K3S_CONFIG_DIR/barekube-gvisor-default.yaml"
+# The k3s containerd templates import every *.toml file of these directories.
+# The files below belong to barekube, so the default can be switched on and off
+# cleanly. (k3s's own --default-runtime flag only accepts runtimes it detects by
+# itself, and runsc is not one of them.)
+GVISOR_DEFAULT_DROPINS=(
+    "config.toml.d/barekube-gvisor-default.toml:runsc_default_config_v2"
+    "config-v3.toml.d/barekube-gvisor-default.toml:runsc_default_config_v3"
+)
 
 install_gvisor_prerequisites() {
     run_privileged "Installing gVisor dependencies..." "Failed to install gVisor dependencies" \
@@ -78,25 +82,58 @@ add_runsc_to_template() {
     return 0
 }
 
+runsc_default_config_v2() {
+    cat <<'EOF'
+[plugins."io.containerd.grpc.v1.cri".containerd]
+  default_runtime_name = "runsc"
+EOF
+}
+
+runsc_default_config_v3() {
+    cat <<'EOF'
+[plugins.'io.containerd.cri.v1.runtime'.containerd]
+  default_runtime_name = 'runsc'
+EOF
+}
+
 # Makes runsc the runtime of every pod that does not name a RuntimeClass on this
 # node ("on"), or stops doing so ("off"). Returns 0 when it changed something,
 # 1 when the node was already as asked.
 # Usage: set_gvisor_default on|off
 set_gvisor_default() {
-    if [[ "$1" == "on" ]]
-    then
-        sudo grep -qsx "default-runtime: runsc" "$GVISOR_DEFAULT_CONFIG" && return 1
-        run_privileged "Preparing the k3s configuration directory..." "Failed to create $K3S_CONFIG_DIR" \
-            mkdir -p "$K3S_CONFIG_DIR"
-        echo_info "Making gVisor the default runtime..."
-        echo "default-runtime: runsc" | sudo tee "$GVISOR_DEFAULT_CONFIG" > /dev/null
-        exit_if_error "Failed to write $GVISOR_DEFAULT_CONFIG"
-        return 0
-    fi
-    sudo test -f "$GVISOR_DEFAULT_CONFIG" || return 1
-    echo_info "Removing gVisor as the default runtime..."
-    sudo rm -f "$GVISOR_DEFAULT_CONFIG"
-    exit_if_error "Failed to remove $GVISOR_DEFAULT_CONFIG"
+    local ENTRY FILE STANZA CHANGED=1
+    for ENTRY in "${GVISOR_DEFAULT_DROPINS[@]}"
+    do
+        FILE="$K3S_CONTAINERD_DIR/${ENTRY%%:*}"
+        STANZA="${ENTRY##*:}"
+        if [[ "$1" == "on" ]]
+        then
+            add_default_runtime_dropin "$FILE" "$STANZA" && CHANGED=0
+        else
+            remove_default_runtime_dropin "$FILE" && CHANGED=0
+        fi
+    done
+    return "$CHANGED"
+}
+
+# Usage: add_default_runtime_dropin FILE STANZA_FUNCTION  (0 = wrote it, 1 = already there)
+add_default_runtime_dropin() {
+    local FILE="$1" STANZA="$2"
+    "$STANZA" | sudo cmp -s - "$FILE" && return 1
+    run_privileged "Preparing $(dirname "$FILE")..." "Failed to create $(dirname "$FILE")" \
+        mkdir -p "$(dirname "$FILE")"
+    echo_info "Making gVisor the default runtime in $FILE..."
+    "$STANZA" | sudo tee "$FILE" > /dev/null
+    exit_if_error "Failed to write $FILE"
+    return 0
+}
+
+# Usage: remove_default_runtime_dropin FILE  (0 = removed it, 1 = was not there)
+remove_default_runtime_dropin() {
+    sudo test -f "$1" || return 1
+    echo_info "Removing gVisor as the default runtime from $1..."
+    sudo rm -f "$1"
+    exit_if_error "Failed to remove $1"
     return 0
 }
 
