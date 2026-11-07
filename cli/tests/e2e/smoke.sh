@@ -190,7 +190,10 @@ spec:
       image: $BUSYBOX
       command: [sleep, "600"]
 MANIFEST
-  kc wait --for=condition=Ready pod/sandboxed --timeout=240s
+  kc wait --for=condition=Ready pod/sandboxed --timeout=240s || {
+    kc describe pod sandboxed | tail -25
+    return 1
+  }
   # gVisor answers dmesg with its own banner; a normal container shows the host's.
   local banner
   banner="$(kc exec sandboxed -- dmesg)"
@@ -227,7 +230,11 @@ check_longhorn_prerequisites() {
   for n in "${NODES[@]}"; do
     node "$n" dpkg -s open-iscsi nfs-common curl grep bash >/dev/null || { log "$n lacks Longhorn packages"; return 1; }
     node "$n" iscsiadm --version >/dev/null || { log "iscsiadm is missing on $n"; return 1; }
-    node "$n" systemctl is-active iscsid >/dev/null || { log "iscsid is not running on $n"; return 1; }
+    node "$n" systemctl is-active iscsid >/dev/null || {
+      log "iscsid is not running on $n"
+      node "$n" systemctl --no-pager status iscsid iscsid.socket 2>&1 | head -20 || true
+      return 1
+    }
   done
 }
 
@@ -250,15 +257,21 @@ check_idempotent_install() {
 master_1_not_ready_via_master_2() { KUBE_NODE=master-2 node_not_ready master-1; }
 
 check_cluster_survives_losing_a_master() {
+  # Whatever happens below, master-1 is started again when the check ends: the
+  # checks after this one talk to the cluster through master-1.
+  trap 'node master-1 barekube k3s start >/dev/null 2>&1 || true' EXIT
   node master-1 barekube k3s stop
   # The control plane keeps quorum with two of three masters.
   wait_for 240 "master-1 is reported NotReady" master_1_not_ready_via_master_2 || return 1
-  KUBE_NODE=master-2 kc scale deploy/echo --replicas=6 >/dev/null
-  KUBE_NODE=master-2 kc rollout status deploy/echo --timeout=240s || return 1
+  # Writes and scheduling still work through the remaining masters. The probe
+  # has no spread constraint, so the missing node cannot hold it back.
+  KUBE_NODE=master-2 kc create deployment ha-probe --image="$AGNHOST" --replicas=3 -- /agnhost pause >/dev/null
+  KUBE_NODE=master-2 kc rollout status deploy/ha-probe --timeout=240s || return 1
   curl -fsS --max-time 10 "http://$(node_ip agent-1):30080/hostname" >/dev/null || { log "workloads stopped serving"; return 1; }
   node master-1 barekube k3s start
+  trap - EXIT
   wait_for 300 "master-1 is Ready again" node_ready master-1 || return 1
-  kc scale deploy/echo --replicas=5 >/dev/null
+  kc delete deployment ha-probe >/dev/null
 }
 
 check_agent_stop_and_start() {

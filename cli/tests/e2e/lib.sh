@@ -30,7 +30,9 @@ node() {
 # kc ARGS...: kubectl through a control-plane node (KUBE_NODE, default master-1).
 kc() { node "${KUBE_NODE:-master-1}" k3s kubectl "$@"; }
 
-node_ip() { node "$1" hostname -I | awk '{print $1}'; }
+# The address on the LXD network. `hostname -I` is not enough: once k3s runs,
+# the CNI bridge address can be listed first.
+node_ip() { node "$1" ip -4 -o addr show dev eth0 | awk '{print $4}' | cut -d/ -f1; }
 
 # wait_for SECONDS DESCRIPTION COMMAND...
 wait_for() {
