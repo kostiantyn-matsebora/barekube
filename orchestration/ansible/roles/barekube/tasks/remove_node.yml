@@ -1,0 +1,41 @@
+---
+- name: Check the node can be removed
+  ansible.builtin.assert:
+    that:
+      - barekube_node in groups['all']
+      - inventory_hostname != groups['masters'][0]
+      - groups['masters'] | difference([inventory_hostname]) | length > 0
+    fail_msg: >-
+      {{ barekube_node }} cannot be removed. The first master is the one the
+      others join and the playbooks talk to: put another master first in the
+      inventory, run site.yml, then remove this one. The cluster also needs a
+      master left.
+    quiet: true
+
+- name: Choose a master that stays
+  ansible.builtin.set_fact:
+    barekube_survivor: "{{ groups['masters'] | difference([inventory_hostname]) | first }}"
+
+- name: Name of the node in Kubernetes
+  ansible.builtin.set_fact:
+    barekube_node_name: "{{ ansible_facts['hostname'] | default(inventory_hostname) | lower }}"
+
+- name: Move the pods away
+  ansible.builtin.command: >-
+    k3s kubectl drain {{ barekube_node_name }}
+    --ignore-daemonsets --delete-emptydir-data --timeout={{ barekube_drain_timeout }}s
+  delegate_to: "{{ barekube_survivor }}"
+  register: barekube_drain
+  changed_when: "'evicted' in barekube_drain.stdout or 'cordoned' in barekube_drain.stdout"
+  failed_when: barekube_drain.rc != 0 and 'NotFound' not in barekube_drain.stderr
+  when: not (barekube_node_unreachable | default(false) | bool)
+
+- name: Delete the node from the cluster
+  ansible.builtin.command: k3s kubectl delete node {{ barekube_node_name }} --ignore-not-found
+  delegate_to: "{{ barekube_survivor }}"
+  register: barekube_delete
+  changed_when: "'deleted' in barekube_delete.stdout"
+
+- name: Uninstall k3s from the node
+  ansible.builtin.include_tasks: uninstall.yml
+  when: not (barekube_node_unreachable | default(false) | bool)

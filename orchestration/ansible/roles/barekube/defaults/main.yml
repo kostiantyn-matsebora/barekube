@@ -44,6 +44,9 @@ barekube_server_flags: >-
 barekube_state_dir: "{{ lookup('ansible.builtin.env', 'HOME') }}/.barekube/{{ barekube_cluster_name }}"
 barekube_cluster_name: default
 
+# How long to wait for pods to leave a node being removed, in seconds.
+barekube_drain_timeout: 300
+
 # How long to wait for a node to become Ready, in seconds.
 barekube_ready_timeout: 300
 
