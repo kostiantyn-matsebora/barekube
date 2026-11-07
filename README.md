@@ -27,33 +27,47 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
 
 1. Install [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) or [Docker](https://docs.docker.com/get-docker/) on your computer, and make sure you can log in to your machines with [SSH](https://www.openssh.com/).
 
-2. Download the playbooks:
+2. Put your machines in `inventory.yml`, the first master first:
 
-   ```shell
-   curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
-   cd barekube-ansible
+   ```yaml
+   all:
+     children:
+       masters:
+         hosts:
+           192.168.1.10:
+           192.168.1.15:
+           192.168.1.5:
+       agents:
+         hosts:
+           192.168.1.50:
+     vars:
+       ansible_user: ubuntu
+       ansible_become: true
    ```
 
-3. Put your machines in the inventory, as `masters` and `agents`:
+3. Build the cluster, one of two ways (log in with a password instead of a key: add `-k`):
 
-   ```shell
-   cp inventory.example.yml inventory.yml
-   nano inventory.yml
-   ```
+   - Release archive, with Docker or Ansible:
 
-4. Build the cluster (log in with a password instead of a key: `./play.sh -k`):
+     ```shell
+     curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
+     ./barekube-ansible/play.sh
+     ```
 
-   ```shell
-   ./play.sh
-   ```
+   - Ansible collection from [Galaxy](https://galaxy.ansible.com/ui/repo/published/kostiantyn_matsebora/barekube/), with Ansible:
 
-5. Use it. The cluster is now the current context in `~/.kube/config`:
+     ```shell
+     ansible-galaxy collection install kostiantyn_matsebora.barekube
+     ansible-playbook -i inventory.yml kostiantyn_matsebora.barekube.site
+     ```
+
+4. Use it. The cluster is now the current context in `~/.kube/config`:
 
    ```shell
    kubectl get nodes
    ```
 
-Add machines or change settings: run `./play.sh` again. [More](orchestration/ansible/README.md). One node by hand: [use the CLI](#installing-the-cli).
+Add machines or change settings: run step 3 again. [More](orchestration/ansible/README.md). One node by hand: [use the CLI](#installing-the-cli).
 
 ## Installing the CLI
 
