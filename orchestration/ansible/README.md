@@ -1,6 +1,15 @@
-# Build a cluster with Ansible
+# barekube
 
-Two ways, same playbooks.
+Build, change and remove a bare-metal Kubernetes cluster from an inventory:
+
+- [k3s](https://k3s.io/) with HA masters and agents
+- [WireGuard](https://www.wireguard.com/) network between the nodes
+- [gVisor](https://gvisor.dev/) sandbox, optionally the default for pods
+- [Longhorn](https://longhorn.io/) storage prerequisites
+
+Part of [barekube](https://github.com/kostiantyn-matsebora/barekube), the low-level foundation of a bare-metal Kubernetes platform for home setups, IoT and Edge. [Source](https://github.com/kostiantyn-matsebora/barekube) | [Issues](https://github.com/kostiantyn-matsebora/barekube/issues) | [Releases](https://github.com/kostiantyn-matsebora/barekube/releases)
+
+Playbooks: `site` (build), `remove_node`, `uninstall`. Two ways to get them:
 
 ## A. Release archive
 

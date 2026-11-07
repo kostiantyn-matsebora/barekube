@@ -7,7 +7,7 @@ version: 0.4.0
 readme: README.md
 authors:
   - Kostiantyn Matsebora
-description: Build, change and remove a bare-metal k3s cluster (WireGuard, gVisor, Longhorn prerequisites) with the barekube CLI.
+description: Build, change and remove a bare-metal k3s cluster from an inventory, with WireGuard, gVisor and Longhorn prerequisites.
 license:
   - MIT
 repository: https://github.com/kostiantyn-matsebora/barekube
