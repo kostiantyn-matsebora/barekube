@@ -21,7 +21,7 @@ The CLI is written with [bashly](https://bashly.dev) under `cli/`:
 | `cli/src/` | shared functions |
 | `cli/tests/` | unit and end-to-end tests |
 | `cli/release/barekube` | the generated single-file CLI users download |
-| `orchestration/ansible/` | the playbook that builds a whole cluster with the CLI; `ansible-lint` checks it in CI |
+| `orchestration/ansible/` | the playbooks that build, change and remove a whole cluster with the CLI, and `play.sh`, which runs them (in Docker if Ansible is not installed); `ansible-lint` checks them in CI |
 
 ## Working on a change
 

@@ -139,11 +139,12 @@ When an install command finishes it prints `installed` or `already installed`, s
 If you have more than a couple of machines, describe them in an Ansible inventory and let the playbook in [`orchestration/ansible`](orchestration/ansible) do the rest. It installs a verified release of barekube on every machine, then the first master, the other masters one at a time, and the agents. The inventory is the only file you write: the hosts under `masters` and `agents` are your cluster, and the first master is the one the others join.
 
 ```shell
-pipx install 'ansible-core>=2.18,<2.22'
 cd orchestration/ansible
 cp inventory.example.yml inventory.yml     # your machines and settings
-ansible-playbook -i inventory.yml site.yml
+./play.sh -i inventory.yml site.yml
 ```
+
+`play.sh` uses the Ansible on your machine, or, if there is none, builds a small Docker image with everything the playbooks need (Ansible, an SSH client and `cosign`). Your SSH agent or `~/.ssh` keys are used to reach the machines. To install Ansible yourself instead: `pipx install 'ansible-core>=2.18,<2.22'`.
 
 When it finishes, the kubeconfig is in `~/.barekube/default/kubeconfig`. Running the playbook again changes only what differs, so it is also how you add a machine or change a setting.
 
@@ -158,6 +159,21 @@ The settings, all optional, are variables in the inventory:
 | `barekube_tls_san` | `[]` | Extra names for the API server certificate. |
 | `barekube_join_endpoint` | the first master | Where nodes join. Set it to your own virtual IP or load balancer if you have one; barekube does not install one. |
 | `barekube_extra_args` | empty | Anything else to pass to the k3s server. |
+
+Changes to a running cluster are playbooks too:
+
+```shell
+# Take a node out: drain it, delete it from Kubernetes (a master also leaves etcd) and uninstall k3s from it
+./play.sh -i inventory.yml remove-node.yml -e barekube_node=agent-2
+
+# Add a node: put it in the inventory and run site.yml again
+./play.sh -i inventory.yml site.yml
+
+# Remove k3s from every node. This destroys the cluster and its data.
+./play.sh -i inventory.yml uninstall.yml -e barekube_confirm_uninstall=yes
+```
+
+The first master is the one the others join, so `remove-node.yml` refuses it: put another master first in the inventory and run `site.yml`, then remove the old one. For a machine that is gone for good, add `-e barekube_node_unreachable=true`: the node is then only deleted from the cluster. Keep an odd number of masters.
 
 The join token is read from the first master into memory and handed to the other nodes through the environment. It is never written to a file or shown in the output.
 
