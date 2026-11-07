@@ -42,3 +42,19 @@ The CLI is written with [bashly](https://bashly.dev) under `cli/`:
 5. Open a pull request. CI runs the tests and fails when the committed release differs from a fresh regeneration.
 
 Pull requests are squash-merged and the branch is deleted after the merge.
+
+## Releasing
+
+Releases are published by CI from a version tag, never by hand.
+
+1. In a pull request, set the new `version` in `cli/bashly.yml`, regenerate the release as above, and merge it.
+2. Tag the merge commit on `master` and push the tag:
+
+   ```bash
+   git tag v0.3.0
+   git push origin v0.3.0
+   ```
+
+3. The release workflow runs the tests, checks that the tag matches the version, builds the script, and publishes it to GitHub Releases with a checksum, a Sigstore signature and a provenance attestation.
+
+The workflow refuses a tag that is not on `master`, or that does not match `cli/bashly.yml`.

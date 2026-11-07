@@ -22,12 +22,31 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
 
 To install barekube CLI you simply must do the following steps:
 
-- Download barekube CLI script the destination directory, for instance `$HOME/bin`:
+- Download the latest release into a temporary directory, together with its checksum and signature:
 
   ```Bash
-    mkdir -p $HOME/bin
-    wget https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/refs/heads/master/cli/release/barekube -O $HOME/bin/barekube
-    chmod +x $HOME/bin/barekube
+  cd "$(mktemp -d)"
+  BASE=https://github.com/kostiantyn-matsebora/barekube/releases/latest/download
+  wget $BASE/barekube $BASE/SHA256SUMS $BASE/barekube.sigstore.json
+  ```
+
+- Check that the download is intact and was built by this repository's release workflow. The signature check needs [cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
+
+  ```Bash
+  sha256sum --check SHA256SUMS
+  cosign verify-blob --bundle barekube.sigstore.json \
+    --certificate-identity-regexp '^https://github\.com/kostiantyn-matsebora/barekube/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    barekube
+  ```
+
+  If you use the GitHub CLI, `gh attestation verify barekube --repo kostiantyn-matsebora/barekube` checks the build provenance too.
+
+- Install it into the destination directory, for instance `$HOME/bin`:
+
+  ```Bash
+  mkdir -p $HOME/bin
+  install -m 0755 barekube $HOME/bin/barekube
   ```
 
 - Add an alias to your `.bashrc` or `.bash_profile` file:
@@ -69,7 +88,7 @@ Commands:
   k3s killall                     Kill k3s and all k3s related containers
   k3s start-agent                 Start k3s agent node
   k3s stop-agent                  Stop k3s agent node
-  upgrade                         Upgrade barekube CLI to latest version
+  upgrade                         Upgrade barekube CLI to the latest verified release
 
 Options:
   --help, -h

@@ -196,17 +196,27 @@ test_k3s_uninstall_forwards_the_yes_flag() {
   assert_called "uninstall_k3s --yes"
 }
 test_system_enable_autoupdate() { check_delegate barekube_system_enable_autoupdate_command enable_autoupdate; }
-test_upgrade() { check_delegate barekube_upgrade_command upgrade_barekube; }
+test_upgrade() {
+  run barekube_upgrade_command
+  assert_status 0
+  assert_calls "upgrade_barekube  "
+}
 
 test_upgrade_forwards_the_yes_flag() {
   args[--yes]=1
   run barekube_upgrade_command
-  assert_called "upgrade_barekube --yes"
+  assert_called "upgrade_barekube --yes "
 }
 
 test_upgrade_without_yes_forwards_nothing() {
   run barekube_upgrade_command
-  assert_called "upgrade_barekube "
+  assert_called "upgrade_barekube  "
+}
+
+test_upgrade_forwards_the_skip_signature_check_flag() {
+  args[--skip-signature-check]=1
+  run barekube_upgrade_command
+  assert_called "upgrade_barekube  --skip-signature-check"
 }
 
 # A missing server URL or token must stop the install before anything runs.
