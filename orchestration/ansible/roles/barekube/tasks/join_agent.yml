@@ -9,7 +9,7 @@
     K3S_TOKEN: "{{ barekube_token.content | b64decode | trim }}"
   register: barekube_result
   changed_when: (barekube_result.stdout | trim | split('\n') | last | trim) == 'installed'
-  no_log: true
+  no_log: "{{ not (barekube_show_output | bool) }}"
 
 - name: Wait for the node
   ansible.builtin.include_tasks: wait_ready.yml

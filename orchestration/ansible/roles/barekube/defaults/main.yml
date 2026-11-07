@@ -46,3 +46,7 @@ barekube_cluster_name: default
 
 # How long to wait for a node to become Ready, in seconds.
 barekube_ready_timeout: 300
+
+# Show the output of the join commands. They are hidden by default because the
+# join token is in their environment, which verbose Ansible output can print.
+barekube_show_output: false
