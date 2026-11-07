@@ -1,12 +1,13 @@
 # Everything the playbooks need, so nothing has to be installed on your machine
-# except Docker: Ansible, the collections, an SSH client and cosign (which
+# except Docker: Ansible, the collections, an SSH client (with password login)
+# and cosign (which
 # checks the signature of the barekube release).
 FROM python:3.13-slim
 
 COPY --from=gcr.io/projectsigstore/cosign:v2.5.0 /ko-app/cosign /usr/local/bin/cosign
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssh-client \
+    && apt-get install -y --no-install-recommends openssh-client sshpass \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt requirements.yml /tmp/

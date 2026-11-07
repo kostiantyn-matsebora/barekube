@@ -11,6 +11,15 @@ Every release publishes the archive with a checksum, a signature and a provenanc
 
 `play.sh` uses the Ansible on your machine, or, if there is none, builds a small Docker image with everything the playbooks need (Ansible, an SSH client and `cosign`). Your SSH agent or `~/.ssh` keys are used to reach the machines. To install Ansible yourself: `pipx install 'ansible-core>=2.18,<2.22'`.
 
+## Logging in to the machines
+
+| Machines accept | Do |
+|---|---|
+| your SSH key | nothing: your SSH agent or `~/.ssh` keys are used |
+| a username and password | `./play.sh -k`, and enter the password when asked. Add `-K` if `sudo` asks for a password too. Set `ansible_user` in the inventory. |
+
+Without Docker, password login needs [`sshpass`](https://sshpass.sourceforge.net/) on your computer; the Docker image has it. Do not write passwords in the inventory; if you must, encrypt them with [Ansible Vault](https://docs.ansible.com/ansible/latest/vault_guide/).
+
 Without `-i` it reads `inventory.yml`, and without a playbook it runs `site.yml`. Anything else is passed to `ansible-playbook`.
 
 ## The inventory
