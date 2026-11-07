@@ -51,6 +51,14 @@ jobs:
             exit 1
           fi
 
+      - name: Check the playbook installs this release
+        run: |
+          pinned="$(sed -n 's/^barekube_version: *//p' orchestration/ansible/roles/barekube/defaults/main.yml)"
+          if [ "$pinned" != "$GITHUB_REF_NAME" ]; then
+            echo "The playbook installs $pinned by default, not $GITHUB_REF_NAME (orchestration/ansible/roles/barekube/defaults/main.yml)" >&2
+            exit 1
+          fi
+
       # The shipped script is built here, from the tagged sources, with the
       # pinned bashly version - and must equal the committed copy.
       - name: Build the script
