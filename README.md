@@ -1,43 +1,23 @@
-# Barekube - bare-metal kubernetes  platform
+# Barekube - bare-metal kubernetes platform
 
-The overall idea is to create CLI for provisioning and configuration of bare-metal kubernetes cluster tailored for home setup, IoT and Edge, including (but not only)
-following components:
+Barekube is the low-level foundation of a bare-metal kubernetes platform tailored for home setups, IoT and Edge. A single CLI turns plain Linux nodes into a secure k3s cluster, ready for you to build your own platform on top.
 
-- [gVisor](https://en.wikipedia.org/wiki/GVisor) - security layer for running containers efficiently and securely.
-- [k3](https://k3s.io/) kubernetes cluster with [wireguard](https://www.wireguard.com/) network setup and  optional HA configuration.
-- Highly available kubernetes API provided with [kube-vip](https://kube-vip.io/) (planned; no additional infrastructure required).
-- MetalLB as an internal load balancer (optional).
-- Nginx as an internal ingress controller (optional).
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/barekube-platform-dark.svg">
+    <img src="assets/barekube-platform.svg" alt="Barekube: k3s, WireGuard, gVisor and Longhorn prerequisites on bare-metal Linux nodes, with your platform built on top" width="900">
+  </picture>
+</p>
 
-using YAML-based specifications like this:
+What barekube brings:
 
-```yaml
+- [k3s](https://k3s.io/) kubernetes cluster: initial master, additional masters (HA) and agent nodes.
+- [WireGuard](https://www.wireguard.com/) network between the nodes.
+- [gVisor](https://gvisor.dev/) - security layer for running containers efficiently and securely.
+- [Longhorn](https://longhorn.io/) storage prerequisites on the nodes.
 
-- cluster:
-    nodes:
-      - name: master-1
-        role: master
-        IP: 192.168.1.10
-      - name: master-2
-        role: master
-        IP: 192.168.1.15
-      - name: master-3
-        role: master
-        IP: 192.168.1.5
-      - name: agent-1
-        role: agent
-        IP: 192.168.1.50
-      - name: agent-2
-        role: agent
-        IP: 192.168.1.30
-```
+Everything above that (HA API endpoint, load balancing, ingress, ...) is up to your platform.
 
-## Roadmap
-
-- [x] Create a CLI for provisioning and configuration of bare-metal kubernetes cluster.
-- [ ] Add support of yaml configuration files.
-- [ ] Add kube-vip based HA for the kubernetes API.
-  
 ## Installation
 
 To install barekube CLI you simply must do the following steps:
