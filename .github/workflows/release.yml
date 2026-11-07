@@ -2,7 +2,9 @@ name: Release
 
 # Publishes a GitHub release for a version tag: the CLI script, its SHA-256
 # checksum, a keyless Sigstore signature and a build provenance attestation.
-# It runs only after the unit tests and the five-node cluster test pass.
+# It runs only after the unit tests and the five-node cluster test pass. The
+# cluster test is not repeated when an earlier green run covers the same code
+# (only documentation or version numbers changed since, see same-code.sh).
 # Nothing is signed from a developer machine; the signing identity is this
 # workflow at a version tag, which is what `barekube upgrade` verifies.
 on:
@@ -18,14 +20,64 @@ jobs:
       contents: read
 
   # A release needs a real cluster: five nodes built and checked end to end.
+  # Look for an earlier green run of the same code first.
+  proof:
+    name: Earlier cluster test of the same code
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      reuse: ${{ steps.find.outputs.reuse }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Find a green cluster test of the same code
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            gh run list --workflow e2e.yml --status success --limit 30 \
+              --json headSha,url --jq '.[] | "\(.headSha) \(.url)"'
+            # Release runs ran the cluster test as their "e2e / ..." jobs.
+            for id in $(gh run list --workflow release.yml --limit 15 --json databaseId --jq '.[].databaseId'); do
+              gh run view "$id" --json headSha,url,jobs --jq '
+                [.jobs[] | select(.name | startswith("e2e / "))] as $e2e
+                | select(($e2e | length) > 0 and all($e2e[]; .conclusion == "success"))
+                | "\(.headSha) \(.url)"'
+            done
+          } >"$RUNNER_TEMP/candidates"
+          reuse=false
+          while read -r sha url; do
+            git cat-file -e "$sha^{commit}" 2>/dev/null || continue
+            if cli/tests/e2e/same-code.sh "$sha" "$GITHUB_SHA"; then
+              echo "The cluster test of $sha passed on the same code: $url"
+              echo "### Cluster test reused from $url" >>"$GITHUB_STEP_SUMMARY"
+              reuse=true
+              break
+            fi
+          done <"$RUNNER_TEMP/candidates"
+          [ "$reuse" = true ] || echo "No earlier green run covers this code, so the cluster test runs."
+          echo "reuse=$reuse" >>"$GITHUB_OUTPUT"
+
   e2e:
+    needs: proof
+    if: ${{ needs.proof.outputs.reuse != 'true' }}
     uses: ./.github/workflows/e2e.yml
     permissions:
       contents: read
 
   release:
     name: Build, sign and publish
-    needs: [tests, e2e]
+    needs: [tests, proof, e2e]
+    # The cluster test is skipped only when an earlier run of the same code passed.
+    if: >-
+      ${{ !cancelled() && needs.tests.result == 'success' && needs.proof.result == 'success'
+      && (needs.e2e.result == 'success' || (needs.e2e.result == 'skipped' && needs.proof.outputs.reuse == 'true')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release
