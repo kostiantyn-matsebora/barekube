@@ -35,7 +35,7 @@ run_playbook() {
       -e barekube_verify_signature=false \
       -e barekube_show_output=true \
       -e "barekube_gvisor_default=$GVISOR_DEFAULT" \
-      -e "barekube_disable=[servicelb,traefik]" \
+      -e '{"barekube_disable": ["servicelb", "traefik"]}' \
       -e "barekube_state_dir=$STATE_DIR/ansible"
   )
 }
