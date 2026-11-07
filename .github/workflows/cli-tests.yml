@@ -67,7 +67,7 @@ jobs:
       - name: Install Ansible and ansible-lint
         run: |
           pipx install --include-deps "$(grep -h ansible-core orchestration/ansible/requirements.txt)"
-          pipx inject ansible-core ansible-lint
+          pipx inject --include-apps ansible-core ansible-lint
           ansible-galaxy collection install -r orchestration/ansible/requirements.yml
       - name: Lint
         working-directory: orchestration/ansible
