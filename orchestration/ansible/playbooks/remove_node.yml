@@ -3,7 +3,7 @@
 # (for a master that also removes its etcd member) and uninstalls k3s from it.
 # Take the node out of the inventory afterwards.
 #
-#   ansible-playbook -i inventory.yml remove-node.yml -e barekube_node=agent-2
+#   ansible-playbook -i inventory.yml remove_node.yml -e barekube_node=agent-2
 #
 # A machine that is gone for good: add -e barekube_node_unreachable=true to skip
 # the drain and the uninstall and only delete it from the cluster.

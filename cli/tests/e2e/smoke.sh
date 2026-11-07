@@ -400,7 +400,7 @@ check_agent_uninstall() {
 etcd_members() { kc get nodes -l node-role.kubernetes.io/etcd=true --no-headers | wc -l; }
 
 check_playbook_removes_and_readds_an_agent() {
-  run_playbook remove-node.yml -e barekube_node=agent-2 >"$STATE_DIR/logs/remove-agent.log" 2>&1 \
+  run_playbook remove_node.yml -e barekube_node=agent-2 >"$STATE_DIR/logs/remove-agent.log" 2>&1 \
     || { tail -40 "$STATE_DIR/logs/remove-agent.log"; return 1; }
   expect_eq "$(kc get nodes --no-headers | wc -l)" 4 "nodes after removing agent-2" || return 1
   ! node agent-2 test -e /usr/local/bin/k3s || { log "k3s is still installed on agent-2"; return 1; }
@@ -410,7 +410,7 @@ check_playbook_removes_and_readds_an_agent() {
 }
 
 check_playbook_removes_and_readds_a_master() {
-  run_playbook remove-node.yml -e barekube_node=master-3 >"$STATE_DIR/logs/remove-master.log" 2>&1 \
+  run_playbook remove_node.yml -e barekube_node=master-3 >"$STATE_DIR/logs/remove-master.log" 2>&1 \
     || { tail -40 "$STATE_DIR/logs/remove-master.log"; return 1; }
   expect_eq "$(kc get nodes --no-headers | wc -l)" 4 "nodes after removing master-3" || return 1
   wait_for 120 "master-3 has left etcd" test "$(etcd_members)" -eq 2 || return 1
@@ -420,7 +420,7 @@ check_playbook_removes_and_readds_a_master() {
 }
 
 check_playbook_refuses_to_remove_the_first_master() {
-  ! run_playbook remove-node.yml -e barekube_node=master-1 >/dev/null 2>&1 || { log "the first master was removed"; return 1; }
+  ! run_playbook remove_node.yml -e barekube_node=master-1 >/dev/null 2>&1 || { log "the first master was removed"; return 1; }
   node_ready master-1
 }
 

@@ -1,4 +1,10 @@
-# Building a cluster with Ansible
+# Build a cluster with Ansible
+
+Two ways, same playbooks.
+
+## A. Release archive
+
+Needs [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) or [Docker](https://docs.docker.com/get-docker/).
 
 ```shell
 curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
@@ -7,50 +13,86 @@ cp inventory.example.yml inventory.yml     # your machines
 ./play.sh
 ```
 
-Every release publishes the archive with a checksum, a signature and a provenance attestation. To verify it first: download it and run `gh attestation verify barekube-ansible.tar.gz --repo kostiantyn-matsebora/barekube`.
+Verify first: `gh attestation verify barekube-ansible.tar.gz --repo kostiantyn-matsebora/barekube`
 
-`play.sh` uses the Ansible on your machine, or, if there is none, builds a small Docker image with everything the playbooks need (Ansible, an SSH client and `cosign`). Your SSH agent or `~/.ssh` keys are used to reach the machines. To install Ansible yourself: `pipx install 'ansible-core>=2.18,<2.22'`.
+## B. Ansible collection
 
-## Logging in to the machines
-
-| Machines accept | Do |
-|---|---|
-| your SSH key | nothing: your SSH agent or `~/.ssh` keys are used |
-| a username and password | `./play.sh -k`, and enter the password when asked. Add `-K` if `sudo` asks for a password too. Set `ansible_user` in the inventory. |
-
-Without Docker, password login needs [`sshpass`](https://sshpass.sourceforge.net/) on your computer; the Docker image has it. Do not write passwords in the inventory; if you must, encrypt them with [Ansible Vault](https://docs.ansible.com/ansible/latest/vault_guide/).
-
-The inventory can be anywhere: `./play.sh -i ~/clusters/home/inventory.yml`. Without `-i` it reads `inventory.yml` in the directory you run it from. Without a playbook it runs `site.yml`. Anything else is passed to `ansible-playbook`.
-
-## The inventory
-
-The hosts under `masters` and `agents` are your cluster. The first master is the initial one: the others join it. Keep an odd number of masters. Settings are variables, all optional:
-
-| Variable | Default | What it does |
-|---|---|---|
-| `barekube_version` | the version this playbook was released with | The barekube release to install. Its checksum and Sigstore signature are checked first (this needs `cosign`; set `barekube_verify_signature: false` to check only the checksum). |
-| `barekube_longhorn` | `true` | Install the packages Longhorn needs on every node. |
-| `barekube_gvisor_default` | `false` | Run new pods in the gVisor sandbox unless they say otherwise. See [gVisor as the default](../../README.md#gvisor-as-the-default). |
-| `barekube_disable` | `[]` | k3s components to turn off, for example `[servicelb, traefik]`. |
-| `barekube_tls_san` | `[]` | Extra names for the API server certificate. |
-| `barekube_join_endpoint` | the first master | Where nodes join. Set it to your own virtual IP or load balancer if you have one; barekube does not install one. |
-| `barekube_extra_args` | empty | Anything else to pass to the k3s server. |
-| `barekube_kubeconfig` | `~/.kube/config` | The kubeconfig the cluster is added to, as the current context `barekube-default`. Your other clusters in it are kept. |
-| `barekube_cluster_name` | `default` | Names the context, `barekube-<name>`. Set it if you build more than one cluster. |
-
-The join token is read from the first master into memory and handed to the other nodes through the environment. It is never written to a file or shown in the output.
-
-## Changing a running cluster
+Needs [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) 2.18+.
 
 ```shell
-# Add a node: put it in the inventory and run the playbook again
-./play.sh
-
-# Take a node out: drain it, delete it from Kubernetes (a master also leaves etcd) and uninstall k3s from it
-./play.sh remove-node.yml -e barekube_node=agent-2
-
-# Remove k3s from every node and the cluster from your kubeconfig. This destroys the cluster and its data.
-./play.sh uninstall.yml -e barekube_confirm_uninstall=yes
+ansible-galaxy collection install kostiantyn_matsebora.barekube
+ansible-playbook -i inventory.yml kostiantyn_matsebora.barekube.site
 ```
 
-The first master is the one the others join, so `remove-node.yml` refuses it: put another master first in the inventory and run `./play.sh`, then remove the old one. For a machine that is gone for good, add `-e barekube_node_unreachable=true`: the node is then only deleted from the cluster.
+- Pin a version: `requirements.yml` with `name: kostiantyn_matsebora.barekube`, `version: "0.4.0"`
+- Without Galaxy: `ansible-galaxy collection install kostiantyn_matsebora-barekube-<version>.tar.gz` (attached to the release)
+- Playbooks: `site`, `remove_node`, `uninstall`
+
+## Inventory
+
+```yaml
+all:
+  children:
+    masters:                  # the first one is the initial master
+      hosts:
+        192.168.1.10:
+        192.168.1.15:
+        192.168.1.5:
+    agents:
+      hosts:
+        192.168.1.50:
+  vars:
+    ansible_user: ubuntu
+    ansible_become: true
+```
+
+- Hosts are IP addresses or names. For a name that does not resolve, add `ansible_host: <IP>`
+- `-e barekube_node=` takes the name as written in the inventory
+- Keep an odd number of masters
+- Full template: [inventory.example.yml](inventory.example.yml)
+
+## Settings
+
+All optional, set in the inventory.
+
+| Variable | Default | |
+|---|---|---|
+| `barekube_version` | this release | barekube release to install, checksum and signature checked (`cosign`; `barekube_verify_signature: false` skips the signature) |
+| `barekube_longhorn` | `true` | Longhorn packages on every node |
+| `barekube_gvisor_default` | `false` | [gVisor as the default](../../README.md#gvisor-as-the-default) |
+| `barekube_disable` | `[]` | k3s components to turn off, e.g. `[servicelb, traefik]` |
+| `barekube_tls_san` | `[]` | extra API server certificate names |
+| `barekube_join_endpoint` | first master | where nodes join: your VIP or load balancer |
+| `barekube_extra_args` | empty | extra k3s server arguments |
+| `barekube_kubeconfig` | `~/.kube/config` | where the cluster is added, as context `barekube-default` |
+| `barekube_cluster_name` | `default` | context name: `barekube-<name>` |
+
+## Logging in
+
+| Machines accept | Run |
+|---|---|
+| SSH key | `./play.sh` (agent or `~/.ssh` keys) |
+| password | `./play.sh -k` (`-K` if sudo asks too) |
+
+Password login without Docker needs [`sshpass`](https://sshpass.sourceforge.net/).
+
+## `play.sh`
+
+```shell
+./play.sh                                    # ./inventory.yml, playbook site
+./play.sh -i ~/clusters/home/inventory.yml   # inventory anywhere
+./play.sh remove_node.yml -e barekube_node=agent-2
+```
+
+Uses Ansible if installed, else Docker (`BAREKUBE_USE_DOCKER=1` forces Docker).
+
+## Change a running cluster
+
+```shell
+./play.sh                                                  # add a node: put it in the inventory first
+./play.sh remove_node.yml -e barekube_node=agent-2         # drain, delete, uninstall
+./play.sh uninstall.yml -e barekube_confirm_uninstall=yes  # destroys the cluster
+```
+
+- `remove_node` refuses the first master: put another master first, run `./play.sh`, then remove it
+- Machine gone for good: add `-e barekube_node_unreachable=true`

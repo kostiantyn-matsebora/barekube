@@ -66,7 +66,8 @@ if [[ "$PROVISIONER" == "ansible" ]]; then
   mkdir -p ~/.ssh && chmod 700 ~/.ssh
   [[ -f ~/.ssh/id_ed25519 ]] || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519
   for n in "${NODES[@]}"; do
-    wait_for 120 "sshd is running on $n" node "$n" systemctl is-active ssh
+    # On Ubuntu 24.04 sshd is socket-activated; start it so it is running.
+    wait_for 120 "sshd is running on $n" node "$n" sh -c "systemctl start ssh && systemctl is-active ssh"
     node "$n" install -d -m 700 -o ubuntu -g ubuntu /home/ubuntu/.ssh
     lxc file push ~/.ssh/id_ed25519.pub "$n/home/ubuntu/.ssh/authorized_keys" --uid 1000 --gid 1000 --mode 600
   done

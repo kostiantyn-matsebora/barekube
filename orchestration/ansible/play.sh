@@ -4,7 +4,7 @@
 #
 #   ./play.sh                                   build the cluster in ./inventory.yml
 #   ./play.sh -i ~/clusters/home/inventory.yml  use an inventory anywhere
-#   ./play.sh remove-node.yml -e barekube_node=agent-2
+#   ./play.sh remove_node.yml -e barekube_node=agent-2
 #
 # Without -i it reads inventory.yml in the directory you run it from (or, if
 # there is none, the one next to this script). Without a playbook it runs
@@ -47,7 +47,10 @@ while (($#)); do
       shift
       [[ $# -gt 0 ]] || break
       rest+=("$1") ;;
-    *.yml | *.yaml) has_playbook=1; rest+=("$1") ;;
+    *.yml | *.yaml)
+      has_playbook=1
+      # The playbooks live in playbooks/; they can be named without it.
+      if [[ ! -e "$1" && -e "$here/playbooks/$1" ]]; then rest+=("playbooks/$1"); else rest+=("$1"); fi ;;
     *) rest+=("$1") ;;
   esac
   shift
@@ -63,7 +66,7 @@ if ((${#inventories[@]} == 0)); then
     exit 1
   fi
 fi
-[[ -n "$has_playbook" ]] || rest+=(site.yml)
+[[ -n "$has_playbook" ]] || rest+=(playbooks/site.yml)
 
 if [[ -z "${BAREKUBE_USE_DOCKER:-}" ]] && command -v ansible-playbook >/dev/null 2>&1; then
   args=()
