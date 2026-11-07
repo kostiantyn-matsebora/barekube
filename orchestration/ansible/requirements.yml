@@ -1,0 +1,4 @@
+# Only needed to run against LXD containers (the cluster test); real machines
+# use plain SSH.
+collections:
+  - name: community.general

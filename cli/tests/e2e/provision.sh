@@ -17,8 +17,11 @@ launch_node() {
   node "$name" bash -c 'mkdir -p /etc/needrestart/conf.d && echo "\$nrconf{restart} = \"a\";" >/etc/needrestart/conf.d/90-auto.conf'
   # The kubelet reads /dev/kmsg, which a container does not have.
   node "$name" bash -c 'echo "L /dev/kmsg - - - - /dev/console" >/etc/tmpfiles.d/kmsg.conf && ln -sf /dev/console /dev/kmsg'
-  lxc file push "$ROOT/cli/release/barekube" "$name/usr/local/bin/barekube" --mode 0755
-  node "$name" barekube --version
+  # With the Ansible provisioner the playbook puts the CLI on the nodes itself.
+  if [[ "$PROVISIONER" == "script" ]]; then
+    lxc file push "$ROOT/cli/release/barekube" "$name/usr/local/bin/barekube" --mode 0755
+    node "$name" barekube --version
+  fi
 }
 
 install_prerequisites() {
@@ -45,6 +48,38 @@ log "gVisor is the default for pods: $GVISOR_DEFAULT"
 group "Create the five nodes"
 parallel_nodes launch_node "${NODES[@]}"
 endgroup
+
+# The Ansible provisioner builds the cluster with the playbook in
+# orchestration/ansible and the CLI of this checkout; everything after the
+# nodes exist is the playbook's work.
+if [[ "$PROVISIONER" == "ansible" ]]; then
+  group "Build the cluster with the Ansible playbook"
+  FIRST_IP="$(node_ip master-1)"
+  INVENTORY="$STATE_DIR/inventory.yml"  # run_playbook reads this file
+  {
+    echo "all:"
+    echo "  children:"
+    echo "    masters:"
+    echo "      hosts:"
+    for n in "${MASTERS[@]}"; do echo "        $n: { ansible_host: $n, barekube_address: $(node_ip "$n") }"; done
+    echo "    agents:"
+    echo "      hosts:"
+    for n in "${AGENTS[@]}"; do echo "        $n: { ansible_host: $n, barekube_address: $(node_ip "$n") }"; done
+    echo "  vars:"
+    echo "    ansible_connection: community.general.lxd"
+  } >"$INVENTORY"
+  cat "$INVENTORY"
+  run_playbook
+  TOKEN="$(node master-1 cat /var/lib/rancher/k3s/server/token)"
+  echo "::add-mask::$TOKEN"
+  printf '%s\n' "$FIRST_IP" >"$STATE_DIR/first-ip"
+  printf '%s' "$TOKEN" >"$STATE_DIR/token"
+  chmod 600 "$STATE_DIR/token"
+  kc get nodes -o wide
+  endgroup
+  log "cluster is up"
+  exit 0
+fi
 
 group "Install dependencies on every node"
 parallel_nodes install_prerequisites "${NODES[@]}"

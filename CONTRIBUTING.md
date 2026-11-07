@@ -21,6 +21,7 @@ The CLI is written with [bashly](https://bashly.dev) under `cli/`:
 | `cli/src/` | shared functions |
 | `cli/tests/` | unit and end-to-end tests |
 | `cli/release/barekube` | the generated single-file CLI users download |
+| `orchestration/ansible/` | the playbook that builds a whole cluster with the CLI; `ansible-lint` checks it in CI |
 
 ## Working on a change
 
@@ -45,7 +46,7 @@ Pull requests are squash-merged and the branch is deleted after the merge.
 
 ## The cluster test
 
-The `E2E cluster` workflow builds a real cluster of three masters and two agents (LXD containers on one GitHub runner) with the barekube script of the commit, then checks it end to end: the control plane, the WireGuard mesh, pod and service networking, gVisor, the Longhorn prerequisites, failover and the day-two commands. It runs every day, on demand from the Actions tab, and before every release; a release is not published unless it passes. It is not part of the pull request checks because it takes about ten minutes.
+The `E2E cluster` workflow builds a real cluster of three masters and two agents (LXD containers on one GitHub runner) with the barekube script of the commit, then checks it end to end. It builds it three times: with the barekube commands run node by node, and with the Ansible playbook with and without gVisor as the default. The checks cover the control plane, the WireGuard mesh, pod and service networking, gVisor, the Longhorn prerequisites, failover and the day-two commands. It runs every day, on demand from the Actions tab, and before every release; a release is not published unless it passes. It is not part of the pull request checks because it takes about ten minutes.
 
 The scripts are in `cli/tests/e2e/`.
 
@@ -53,7 +54,7 @@ The scripts are in `cli/tests/e2e/`.
 
 Releases are published by CI from a version tag, never by hand.
 
-1. In a pull request, set the new `version` in `cli/bashly.yml`, regenerate the release as above, and merge it.
+1. In a pull request, set the new `version` in `cli/bashly.yml` and `barekube_version` in `orchestration/ansible/roles/barekube/defaults/main.yml`, regenerate the release as above, and merge it.
 2. Tag the merge commit on `master` and push the tag:
 
    ```bash
@@ -63,4 +64,4 @@ Releases are published by CI from a version tag, never by hand.
 
 3. The release workflow runs the tests and the five-node cluster test, checks that the tag matches the version, builds the script, and publishes it to GitHub Releases with a checksum, a Sigstore signature and a provenance attestation.
 
-The workflow refuses a tag that is not on `master`, or that does not match `cli/bashly.yml`.
+The workflow refuses a tag that is not on `master`, that does not match `cli/bashly.yml`, or that differs from `barekube_version` in `orchestration/ansible/roles/barekube/defaults/main.yml`. Change both versions in the release commit.
