@@ -313,6 +313,21 @@ test_publish_with_on_adds_the_default_policy() {
 test_publish_with_off_removes_the_default_policy() {
   run publish_gvisor_to_cluster off
   assert_called "sudo rm -f $POLICY"
+  assert_called "sudo k3s kubectl delete mutatingadmissionpolicybinding,mutatingadmissionpolicy barekube-gvisor-default --ignore-not-found"
+}
+
+test_publish_with_off_deletes_the_policy_even_without_the_file() {
+  mock_fail sudo 'test*'
+  run publish_gvisor_to_cluster off
+  assert_status 0
+  refute_called_matching '^sudo rm'
+  assert_called_matching "^sudo k3s kubectl delete "
+}
+
+test_publish_with_off_reports_a_failed_policy_deletion() {
+  mock_fail sudo 'k3s*'
+  run publish_gvisor_to_cluster off
+  assert_output_contains "Failed to remove the gVisor default policy"
 }
 
 test_publish_does_not_restart_k3s() {

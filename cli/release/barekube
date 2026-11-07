@@ -735,8 +735,7 @@ GVISOR_REPO_URL="https://storage.googleapis.com/gvisor/releases"
 GVISOR_APT_SOURCE="/etc/apt/sources.list.d/gvisor.list"
 K3S_CONTAINERD_DIR="/var/lib/rancher/k3s/agent/etc/containerd"
 # k3s applies every manifest in this directory on the server nodes, and removes
-# what a manifest created when the file is deleted. The files below belong to
-# barekube.
+# nothing when a file is deleted. The files below belong to barekube.
 K3S_MANIFESTS_DIR="/var/lib/rancher/k3s/server/manifests"
 GVISOR_RUNTIMECLASSES_MANIFEST="$K3S_MANIFESTS_DIR/barekube-gvisor.yaml"
 GVISOR_DEFAULT_MANIFEST="$K3S_MANIFESTS_DIR/barekube-gvisor-default.yaml"
@@ -939,7 +938,14 @@ publish_gvisor_to_cluster() {
     write_k3s_manifest "$GVISOR_RUNTIMECLASSES_MANIFEST" gvisor_runtime_classes_manifest
     case "$1" in
         on) write_k3s_manifest "$GVISOR_DEFAULT_MANIFEST" gvisor_default_policy_manifest ;;
-        off) remove_k3s_manifest "$GVISOR_DEFAULT_MANIFEST" ;;
+        off)
+            # k3s does not delete what a removed manifest created.
+            remove_k3s_manifest "$GVISOR_DEFAULT_MANIFEST"
+            run_privileged "Removing the gVisor default policy from the cluster..." \
+                "Failed to remove the gVisor default policy" \
+                k3s kubectl delete mutatingadmissionpolicybinding,mutatingadmissionpolicy \
+                barekube-gvisor-default --ignore-not-found
+            ;;
     esac
     return 0
 }
