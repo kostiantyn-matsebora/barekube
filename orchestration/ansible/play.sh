@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Runs ansible-playbook with the arguments you give it. Uses the Ansible on your
-# machine if there is one, otherwise a Docker image built from ./Dockerfile.
+# Runs ansible-playbook. Uses the Ansible on your machine if there is one,
+# otherwise a Docker image built from ./Dockerfile.
 #
-#   ./play.sh -i inventory.yml site.yml
+#   ./play.sh                                  build the cluster in inventory.yml
+#   ./play.sh remove-node.yml -e barekube_node=agent-2
+#
+# Without -i it reads inventory.yml, and without a playbook it runs site.yml.
+# Anything else is passed on to ansible-playbook.
 #
 # Set BAREKUBE_USE_DOCKER=1 to use Docker even when Ansible is installed.
 #
@@ -11,6 +15,22 @@
 # saved to ~/.barekube as usual.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Fill in the inventory and the playbook when they are not given.
+has_inventory=""
+has_playbook=""
+skip=""
+for arg in "$@"; do
+  if [[ -n "$skip" ]]; then skip=""; continue; fi
+  case "$arg" in
+    -i | --inventory | -e | --extra-vars | -l | --limit | -t | --tags) skip=1 ;;&
+    -i | --inventory | --inventory=*) has_inventory=1 ;;
+    *.yml | *.yaml) has_playbook=1 ;;
+  esac
+done
+set -- "$@"
+[[ -n "$has_inventory" ]] || set -- -i inventory.yml "$@"
+[[ -n "$has_playbook" ]] || set -- "$@" site.yml
 
 if [[ -z "${BAREKUBE_USE_DOCKER:-}" ]] && command -v ansible-playbook >/dev/null 2>&1; then
   cd "$here"
