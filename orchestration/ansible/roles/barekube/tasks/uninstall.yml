@@ -14,11 +14,9 @@
   changed_when: true
   when: barekube_uninstall_scripts.results | selectattr('stat.exists') | list | length > 0
 
-- name: Forget the kubeconfig of the cluster
-  ansible.builtin.file:
-    path: "{{ barekube_state_dir }}/kubeconfig"
-    state: absent
-  delegate_to: localhost
-  become: false
+- name: Take the cluster out of your kubeconfig
+  ansible.builtin.include_tasks: kubeconfig_write.yml
+  vars:
+    barekube_kubeconfig_remove: true
   run_once: true
   when: inventory_hostname == groups['masters'][0]

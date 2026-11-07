@@ -12,7 +12,7 @@
 #
 # Keep the inventory in this directory (inventory.yml is ignored by git). Your
 # SSH agent or ~/.ssh keys are used to reach the nodes, and the kubeconfig is
-# saved to ~/.barekube as usual.
+# added to ~/.kube/config as usual.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -43,7 +43,7 @@ command -v docker >/dev/null 2>&1 || {
 }
 
 docker build --quiet --tag barekube-ansible "$here" >/dev/null
-mkdir -p "$HOME/.barekube"
+mkdir -p "$HOME/.kube"
 
 args=(
   --rm --interactive
@@ -53,7 +53,7 @@ args=(
   --env ANSIBLE_HOME=/tmp/ansible-home
   --env ANSIBLE_LOCAL_TEMP=/tmp/ansible-tmp
   --volume "$here:/ansible"
-  --volume "$HOME/.barekube:/home/barekube/.barekube"
+  --volume "$HOME/.kube:/home/barekube/.kube"
 )
 [[ -t 0 ]] && args+=(--tty)
 [[ -d "$HOME/.ssh" ]] && args+=(--volume "$HOME/.ssh:/home/barekube/.ssh:ro")
