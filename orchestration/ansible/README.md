@@ -1,9 +1,13 @@
 # Building a cluster with Ansible
 
 ```shell
-cp inventory.example.yml inventory.yml     # put your machines in it
+curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
+cd barekube-ansible
+cp inventory.example.yml inventory.yml     # your machines
 ./play.sh
 ```
+
+Every release publishes the archive with a checksum, a signature and a provenance attestation. To verify it first: download it and run `gh attestation verify barekube-ansible.tar.gz --repo kostiantyn-matsebora/barekube`.
 
 `play.sh` uses the Ansible on your machine, or, if there is none, builds a small Docker image with everything the playbooks need (Ansible, an SSH client and `cosign`). Your SSH agent or `~/.ssh` keys are used to reach the machines. To install Ansible yourself: `pipx install 'ansible-core>=2.18,<2.22'`.
 
