@@ -61,13 +61,12 @@ if [[ "$PROVISIONER" == "ansible" ]]; then
     echo "  children:"
     echo "    masters:"
     echo "      hosts:"
-    for n in "${MASTERS[@]}"; do echo "        $n: { barekube_address: $(node_ip "$n") }"; done
+    for n in "${MASTERS[@]}"; do echo "        $n: { ansible_host: $n, barekube_address: $(node_ip "$n") }"; done
     echo "    agents:"
     echo "      hosts:"
-    for n in "${AGENTS[@]}"; do echo "        $n: { barekube_address: $(node_ip "$n") }"; done
+    for n in "${AGENTS[@]}"; do echo "        $n: { ansible_host: $n, barekube_address: $(node_ip "$n") }"; done
     echo "  vars:"
     echo "    ansible_connection: community.general.lxd"
-    echo "    ansible_host: \"{{ inventory_hostname }}\""
   } >"$INVENTORY"
   cat "$INVENTORY"
   run_playbook
