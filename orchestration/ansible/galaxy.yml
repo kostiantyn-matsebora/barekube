@@ -1,0 +1,42 @@
+---
+namespace: kostiantyn_matsebora
+name: barekube
+# The release version, without the v. The release workflow checks it matches
+# the tag.
+version: 0.4.0
+readme: README.md
+authors:
+  - Kostiantyn Matsebora
+description: Build, change and remove a bare-metal k3s cluster (WireGuard, gVisor, Longhorn prerequisites) with the barekube CLI.
+license:
+  - MIT
+repository: https://github.com/kostiantyn-matsebora/barekube
+documentation: https://github.com/kostiantyn-matsebora/barekube/blob/master/orchestration/ansible/README.md
+homepage: https://github.com/kostiantyn-matsebora/barekube
+issues: https://github.com/kostiantyn-matsebora/barekube/issues
+tags:
+  - infrastructure
+  - networking
+  - security
+  - storage
+  - k3s
+  - kubernetes
+  - gvisor
+  - wireguard
+  - longhorn
+  - baremetal
+dependencies: {}
+# Only the playbooks and the role belong in the collection; the rest is for the
+# release archive that runs them with play.sh.
+build_ignore:
+  - play.sh
+  - Dockerfile
+  - docker-entrypoint.sh
+  - inventory.example.yml
+  - inventory.yml
+  - ansible.cfg
+  - requirements.txt
+  - requirements.yml
+  - .ansible
+  - .ansible-lint
+  - .gitignore

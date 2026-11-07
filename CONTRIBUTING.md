@@ -21,7 +21,7 @@ The CLI is written with [bashly](https://bashly.dev) under `cli/`:
 | `cli/src/` | shared functions |
 | `cli/tests/` | unit and end-to-end tests |
 | `cli/release/barekube` | the generated single-file CLI users download |
-| `orchestration/ansible/` | the playbooks that build, change and remove a whole cluster with the CLI, and `play.sh`, which runs them (in Docker if Ansible is not installed); `ansible-lint` checks them in CI |
+| `orchestration/ansible/` | the Ansible collection `kostiantyn_matsebora.barekube` (playbooks in `playbooks/`, the role in `roles/`) that builds, changes and removes a whole cluster with the CLI, and `play.sh`, which runs it from the release archive (in Docker if Ansible is not installed); `ansible-lint` checks it in CI |
 
 ## Working on a change
 
@@ -54,7 +54,7 @@ The scripts are in `cli/tests/e2e/`.
 
 Releases are published by CI from a version tag, never by hand.
 
-1. In a pull request, set the new `version` in `cli/bashly.yml` and `barekube_version` in `orchestration/ansible/roles/barekube/defaults/main.yml`, regenerate the release as above, and merge it.
+1. In a pull request, set the new `version` in `cli/bashly.yml`, `barekube_version` (with the `v`) in `orchestration/ansible/roles/barekube/defaults/main.yml` and `version` in `orchestration/ansible/galaxy.yml`, regenerate the release as above, and merge it.
 2. Tag the merge commit on `master` and push the tag:
 
    ```bash
@@ -62,6 +62,6 @@ Releases are published by CI from a version tag, never by hand.
    git push origin v0.3.0
    ```
 
-3. The release workflow runs the tests and the five-node cluster test, checks that the tag matches the version, builds the script, and publishes it to GitHub Releases with a checksum, a Sigstore signature and a provenance attestation, together with `barekube-ansible.tar.gz`, the packed playbooks (`orchestration/package.sh`), which has the same.
+3. The release workflow runs the tests and the five-node cluster test, checks that the tag matches the version, builds the script, and publishes it to GitHub Releases with a checksum, a Sigstore signature and a provenance attestation, together with `barekube-ansible.tar.gz` (the packed playbooks and `play.sh`, from `orchestration/package.sh`) and the Ansible collection, each with the same. A last job publishes the collection to Ansible Galaxy, but only if the repository has a `GALAXY_API_KEY` secret (an API token from your Galaxy profile, for the `kostiantyn_matsebora` namespace); without it the job only prints a notice.
 
-The workflow refuses a tag that is not on `master`, that does not match `cli/bashly.yml`, or that differs from `barekube_version` in `orchestration/ansible/roles/barekube/defaults/main.yml`. Change both versions in the release commit.
+The workflow refuses a tag that is not on `master`, that does not match `cli/bashly.yml`, or whose version differs from `barekube_version` in `orchestration/ansible/roles/barekube/defaults/main.yml` or from `version` in `orchestration/ansible/galaxy.yml`. Change all three versions in the release commit.

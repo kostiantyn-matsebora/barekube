@@ -83,6 +83,17 @@ jobs:
           test -x play.sh
           cp inventory.example.yml inventory.yml
           ./play.sh --syntax-check
+      - name: The collection builds, installs and runs by its full name
+        run: |
+          ansible-galaxy collection build orchestration/ansible --output-path "$RUNNER_TEMP/collection"
+          ansible-galaxy collection install "$RUNNER_TEMP"/collection/kostiantyn_matsebora-barekube-*.tar.gz \
+            --collections-path "$RUNNER_TEMP/collections"
+          mkdir "$RUNNER_TEMP/elsewhere" && cd "$RUNNER_TEMP/elsewhere"
+          cp "$GITHUB_WORKSPACE/orchestration/ansible/inventory.example.yml" inventory.yml
+          for playbook in site remove_node uninstall; do
+            ANSIBLE_COLLECTIONS_PATH="$RUNNER_TEMP/collections" \
+              ansible-playbook -i inventory.yml "kostiantyn_matsebora.barekube.$playbook" --syntax-check
+          done
       - name: The Docker wrapper works
         working-directory: orchestration/ansible
         env:

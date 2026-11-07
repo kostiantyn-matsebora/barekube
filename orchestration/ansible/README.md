@@ -1,5 +1,11 @@
 # Building a cluster with Ansible
 
+The playbooks come two ways, with the same content. Pick one.
+
+## A. Release archive with `play.sh`
+
+Needs [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) or [Docker](https://docs.docker.com/get-docker/).
+
 ```shell
 curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
 cd barekube-ansible
@@ -8,6 +14,29 @@ cp inventory.example.yml inventory.yml     # your machines
 ```
 
 Every release publishes the archive with a checksum, a signature and a provenance attestation. To verify it first: download it and run `gh attestation verify barekube-ansible.tar.gz --repo kostiantyn-matsebora/barekube`.
+
+## B. Ansible collection
+
+Needs [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) 2.18 or newer.
+
+```shell
+ansible-galaxy collection install kostiantyn_matsebora.barekube
+ansible-playbook -i inventory.yml kostiantyn_matsebora.barekube.site
+```
+
+Pin a version in a `requirements.yml`:
+
+```yaml
+collections:
+  - name: kostiantyn_matsebora.barekube
+    version: "0.4.0"
+```
+
+Without Galaxy, install the collection file attached to the release: `ansible-galaxy collection install kostiantyn_matsebora-barekube-<version>.tar.gz`.
+
+The playbooks are `site` (build the cluster), `remove_node` and `uninstall`, for example `ansible-playbook -i inventory.yml kostiantyn_matsebora.barekube.remove_node -e barekube_node=agent-2`.
+
+The rest of this page uses `./play.sh`; with the collection, run the same playbooks with `ansible-playbook` as above.
 
 `play.sh` uses the Ansible on your machine, or, if there is none, builds a small Docker image with everything the playbooks need (Ansible, an SSH client and `cosign`). Your SSH agent or `~/.ssh` keys are used to reach the machines. To install Ansible yourself: `pipx install 'ansible-core>=2.18,<2.22'`.
 
@@ -24,7 +53,25 @@ The inventory can be anywhere: `./play.sh -i ~/clusters/home/inventory.yml`. Wit
 
 ## The inventory
 
-The hosts under `masters` and `agents` are your cluster. The first master is the initial one: the others join it. Keep an odd number of masters. Settings are variables, all optional:
+The hosts under `masters` and `agents` are your cluster. A minimal inventory ([the full template](inventory.example.yml)):
+
+```yaml
+all:
+  children:
+    masters:
+      hosts:
+        master-1: { ansible_host: 192.168.1.10 }
+        master-2: { ansible_host: 192.168.1.15 }
+        master-3: { ansible_host: 192.168.1.5 }
+    agents:
+      hosts:
+        agent-1: { ansible_host: 192.168.1.50 }
+  vars:
+    ansible_user: ubuntu
+    ansible_become: true
+```
+
+ The first master is the initial one: the others join it. Keep an odd number of masters. Settings are variables, all optional:
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -47,10 +94,10 @@ The join token is read from the first master into memory and handed to the other
 ./play.sh
 
 # Take a node out: drain it, delete it from Kubernetes (a master also leaves etcd) and uninstall k3s from it
-./play.sh remove-node.yml -e barekube_node=agent-2
+./play.sh remove_node.yml -e barekube_node=agent-2
 
 # Remove k3s from every node and the cluster from your kubeconfig. This destroys the cluster and its data.
 ./play.sh uninstall.yml -e barekube_confirm_uninstall=yes
 ```
 
-The first master is the one the others join, so `remove-node.yml` refuses it: put another master first in the inventory and run `./play.sh`, then remove the old one. For a machine that is gone for good, add `-e barekube_node_unreachable=true`: the node is then only deleted from the cluster.
+The first master is the one the others join, so `remove_node.yml` refuses it: put another master first in the inventory and run `./play.sh`, then remove the old one. For a machine that is gone for good, add `-e barekube_node_unreachable=true`: the node is then only deleted from the cluster.

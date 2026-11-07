@@ -53,7 +53,7 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
    kubectl get nodes
    ```
 
-Run `./play.sh` again to add machines or change settings. More: [settings, removing nodes, teardown](orchestration/ansible/README.md). To set up one node by hand, [use the CLI](#installing-the-cli).
+Run `./play.sh` again to add machines or change settings. More: [settings, removing nodes, teardown, and installing the playbooks as an Ansible collection from Galaxy](orchestration/ansible/README.md). To set up one node by hand, [use the CLI](#installing-the-cli).
 
 ## Installing the CLI
 
