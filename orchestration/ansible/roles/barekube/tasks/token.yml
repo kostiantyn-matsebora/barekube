@@ -1,0 +1,10 @@
+---
+# Reads the join token from the initial master into memory. It is passed to the
+# CLI in the environment, never as an argument and never written to a file.
+- name: Read the join token
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/token
+  delegate_to: "{{ groups['masters'][0] }}"
+  run_once: true
+  register: barekube_token
+  no_log: true

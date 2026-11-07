@@ -57,15 +57,35 @@ jobs:
       - name: Run the installation instructions
         run: cli/tests/readme_install.sh local
 
+  # The Ansible playbook: lint and syntax check. The cluster test runs it for real.
+  ansible-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Ansible and ansible-lint
+        run: |
+          pipx install --include-deps "$(grep -h ansible-core orchestration/ansible/requirements.txt)"
+          pipx inject ansible-core ansible-lint
+          ansible-galaxy collection install -r orchestration/ansible/requirements.yml
+      - name: Lint
+        working-directory: orchestration/ansible
+        run: ansible-lint
+      - name: Syntax check
+        working-directory: orchestration/ansible
+        run: ansible-playbook -i inventory.example.yml site.yml --syntax-check
+
   # The single required status check for branch protection.
   ci-green:
     name: ci-green
     if: always()
-    needs: [test, release-up-to-date, readme-install]
+    needs: [test, release-up-to-date, readme-install, ansible-lint]
     runs-on: ubuntu-latest
     steps:
       - name: Fail unless every job passed
         run: |
           [ "${{ needs.test.result }}" = "success" ] \
             && [ "${{ needs.release-up-to-date.result }}" = "success" ] \
+            && [ "${{ needs.ansible-lint.result }}" = "success" ] \
             && [ "${{ needs.readme-install.result }}" = "success" ]

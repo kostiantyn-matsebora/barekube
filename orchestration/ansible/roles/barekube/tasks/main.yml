@@ -1,0 +1,5 @@
+---
+# Use the playbook (site.yml); each part is a task file of this role.
+- name: Run the whole role in order
+  ansible.builtin.fail:
+    msg: Use site.yml. The role is split into task files that the playbook runs on the right nodes.

@@ -1,0 +1,77 @@
+---
+# Installs the barekube CLI on the node and the packages the cluster needs.
+
+- name: Download and verify the release on this machine
+  when: barekube_cli_path | length == 0
+  run_once: true
+  delegate_to: localhost
+  become: false
+  block:
+    - name: Make a work directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: barekube.
+      register: barekube_work
+
+    - name: Download the release files
+      ansible.builtin.get_url:
+        url: "{{ barekube_release_url }}/{{ item }}"
+        dest: "{{ barekube_work.path }}/{{ item }}"
+        mode: "0644"
+      loop:
+        - barekube
+        - SHA256SUMS
+        - barekube.sigstore.json
+
+    - name: Check the checksum
+      ansible.builtin.command: sha256sum --check --status SHA256SUMS
+      args:
+        chdir: "{{ barekube_work.path }}"
+      changed_when: false
+
+    - name: Check the signature, which must come from the release workflow of this repository
+      ansible.builtin.command:
+        argv:
+          - cosign
+          - verify-blob
+          - --bundle
+          - "{{ barekube_work.path }}/barekube.sigstore.json"
+          - --certificate-identity-regexp
+          - "{{ barekube_signer_identity }}"
+          - --certificate-oidc-issuer
+          - https://token.actions.githubusercontent.com
+          - "{{ barekube_work.path }}/barekube"
+      changed_when: false
+      when: barekube_verify_signature | bool
+
+- name: Put the CLI on the node
+  ansible.builtin.copy:
+    src: "{{ barekube_cli_path if barekube_cli_path | length > 0 else barekube_work.path ~ '/barekube' }}"
+    dest: /usr/local/bin/barekube
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Remove the work directory
+  ansible.builtin.file:
+    path: "{{ barekube_work.path }}"
+    state: absent
+  when: barekube_work.path is defined
+  run_once: true
+  delegate_to: localhost
+  become: false
+
+# The CLI checks what is installed and does nothing when it is all there, but it
+# does not report whether it changed anything, so these tasks are never "changed".
+- name: Install the node dependencies
+  ansible.builtin.command: barekube install dependencies
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  changed_when: false
+
+- name: Install the packages Longhorn needs
+  ansible.builtin.command: barekube install longhorn-dependencies
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  changed_when: false
+  when: barekube_longhorn | bool

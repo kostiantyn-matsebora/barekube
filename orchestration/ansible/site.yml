@@ -1,0 +1,56 @@
+---
+# Builds a cluster from the inventory: dependencies on every node, the initial
+# master, the other masters one at a time, then the agents. Running it again
+# changes only what differs.
+#
+#   ansible-playbook -i inventory.yml site.yml
+
+- name: Prepare every node
+  hosts: all
+  tasks:
+    - name: Install the barekube CLI and the node dependencies
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: prepare
+
+- name: Install the initial master
+  hosts: masters[0]
+  tasks:
+    - name: Install k3s as the first server
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: initial_master
+
+# etcd members must join one at a time.
+- name: Join the other masters
+  hosts: masters[1:]
+  serial: 1
+  tasks:
+    - name: Join the cluster as a server
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: join_master
+
+- name: Join the agents
+  hosts: agents
+  tasks:
+    - name: Join the cluster as an agent
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: join_agent
+
+- name: Apply the cluster settings
+  hosts: masters
+  tasks:
+    - name: Set the gVisor default
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: settings
+
+- name: Fetch the kubeconfig
+  hosts: masters[0]
+  tasks:
+    - name: Save the kubeconfig on this machine
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: kubeconfig

@@ -18,16 +18,21 @@ concurrency:
 
 jobs:
   cluster:
-    name: Five-node cluster (gVisor default ${{ matrix.gvisor_default }})
+    name: Five-node cluster (${{ matrix.provisioner }}, gVisor default ${{ matrix.gvisor_default }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        # The cluster is built twice: with the usual runtime, and with gVisor
-        # as the default runtime of every pod.
-        gvisor_default: [false, true]
+        # The cluster is built by the barekube commands run one node at a time
+        # ("script") and by the Ansible playbook, with and without gVisor as
+        # the default for pods.
+        include:
+          - { provisioner: script, gvisor_default: false }
+          - { provisioner: ansible, gvisor_default: false }
+          - { provisioner: ansible, gvisor_default: true }
     env:
+      E2E_PROVISIONER: ${{ matrix.provisioner }}
       E2E_GVISOR_DEFAULT: ${{ matrix.gvisor_default }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,6 +59,12 @@ jobs:
           sudo modprobe -a overlay br_netfilter ip_tables ip6_tables nf_nat
           lxc profile create barekube-e2e
           lxc profile edit barekube-e2e <cli/tests/e2e/profile.yaml
+
+      - name: Install Ansible
+        if: matrix.provisioner == 'ansible'
+        run: |
+          pipx install --include-deps "$(grep -h ansible-core orchestration/ansible/requirements.txt)"
+          ansible-galaxy collection install -r orchestration/ansible/requirements.yml
 
       - name: Check the runner kernel has WireGuard
         run: sudo modprobe wireguard

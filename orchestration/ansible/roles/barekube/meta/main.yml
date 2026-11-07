@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  author: Kostiantyn Matsebora
+  description: Builds a k3s cluster on bare-metal Linux nodes with the barekube CLI
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions: [all]
+dependencies: []
