@@ -6,6 +6,8 @@
 #                                      (a stand-in wget serves cli/release/*)
 #   readme_install.sh release VERSION  download from the published GitHub
 #                                      release, and run the verification too
+#                                      (the cosign alternative when cosign
+#                                      is installed)
 #
 # The README commands are extracted from its fenced Bash blocks, so the
 # instructions cannot drift from what is tested.
@@ -20,20 +22,23 @@ trap 'rm -rf "$WORK"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # Fenced Bash blocks of a README section, in order. $1: first heading, $2: the
-# heading that ends the range ("" = through the next heading of any level).
+# heading that ends the range, $3: "details" for the blocks inside <details>
+# (the alternatives), otherwise only the blocks outside them.
 blocks_between() {
-  awk -v start="$1" -v stop="$2" '
+  awk -v start="$1" -v stop="$2" -v want="${3:-}" '
     $0 == start { on = 1; next }
-    on && stop != "" && $0 == stop { exit }
-    on && stop == "" && /^#+ / { exit }
+    on && $0 == stop { exit }
+    on && /^<details>/ { indetails = 1 }
+    on && /^<\/details>/ { indetails = 0 }
     on && /^ *```[Bb]ash$/ { inblock = 1; next }
-    on && /^ *```$/ { inblock = 0; print ""; next }
-    on && inblock { sub(/^  /, ""); print }
+    on && /^ *```$/ { inblock = 0; if ((want == "details") == indetails) print ""; next }
+    on && inblock && ((want == "details") == indetails) { sub(/^  /, ""); print }
   ' "$README"
 }
 
 INSTALL_STEPS="$(blocks_between '## Installation' '### Verifying the download')"
 VERIFY_STEPS="$(blocks_between '### Verifying the download' '## Usage')"
+VERIFY_ALTERNATIVE="$(blocks_between '### Verifying the download' '## Usage' details)"
 [[ -n "$INSTALL_STEPS" ]] || fail "no Bash blocks found in the README Installation section"
 
 case "$MODE" in
@@ -102,6 +107,14 @@ if [[ "$MODE" == "release" ]]; then
   printf '%s\n' "$VERIFY_STEPS"
   echo "== Output"
   (set -e; eval "$VERIFY_STEPS")
+
+  # The alternatives are documented too, so they are run too when possible.
+  if command -v cosign >/dev/null; then
+    echo "== Running the README verification alternative (cosign)"
+    printf '%s\n' "$VERIFY_ALTERNATIVE"
+    echo "== Output"
+    (set -e; eval "$VERIFY_ALTERNATIVE")
+  fi
 fi
 
 echo "OK: the README installation steps install barekube $EXPECTED and it works"

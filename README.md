@@ -50,6 +50,25 @@ Releases are signed. To check yours before running it, use the [GitHub CLI](http
 gh attestation verify $HOME/bin/barekube --repo kostiantyn-matsebora/barekube
 ```
 
+<details>
+<summary>Without the GitHub CLI, using cosign</summary>
+
+Fetch the checksum and signature next to the script and verify both with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
+
+```Bash
+cd $HOME/bin
+BASE=https://github.com/kostiantyn-matsebora/barekube/releases/latest/download
+wget -q $BASE/SHA256SUMS $BASE/barekube.sigstore.json
+sha256sum --check SHA256SUMS
+cosign verify-blob --bundle barekube.sigstore.json \
+  --certificate-identity-regexp '^https://github\.com/kostiantyn-matsebora/barekube/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  barekube
+rm SHA256SUMS barekube.sigstore.json
+```
+
+</details>
+
 `barekube upgrade` checks new releases itself.
 
 ## Usage
