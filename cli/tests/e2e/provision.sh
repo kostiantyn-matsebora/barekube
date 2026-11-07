@@ -55,20 +55,37 @@ endgroup
 if [[ "$PROVISIONER" == "ansible" ]]; then
   group "Build the cluster with the Ansible playbook"
   FIRST_IP="$(node_ip master-1)"
-  INVENTORY="$STATE_DIR/inventory.yml"  # run_playbook reads this file
+
+  # The playbooks, as the release archive a user downloads.
+  rm -rf "$STATE_DIR/pack" "$PLAYBOOK_DIR"
+  "$ROOT/orchestration/package.sh" "$STATE_DIR/pack"
+  tar -xzf "$STATE_DIR/pack/barekube-ansible.tar.gz" -C "$STATE_DIR"
+  cp "$ROOT/cli/release/barekube" "$PLAYBOOK_DIR/barekube"
+
+  # The nodes are reached over SSH as the ubuntu user with sudo, like real machines.
+  mkdir -p ~/.ssh && chmod 700 ~/.ssh
+  [[ -f ~/.ssh/id_ed25519 ]] || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519
+  for n in "${NODES[@]}"; do
+    wait_for 120 "sshd is running on $n" node "$n" systemctl is-active ssh
+    node "$n" install -d -m 700 -o ubuntu -g ubuntu /home/ubuntu/.ssh
+    lxc file push ~/.ssh/id_ed25519.pub "$n/home/ubuntu/.ssh/authorized_keys" --uid 1000 --gid 1000 --mode 600
+  done
+
   {
     echo "all:"
     echo "  children:"
     echo "    masters:"
     echo "      hosts:"
-    for n in "${MASTERS[@]}"; do echo "        $n: { ansible_host: $n, barekube_address: $(node_ip "$n") }"; done
+    for n in "${MASTERS[@]}"; do echo "        $n: { ansible_host: $(node_ip "$n") }"; done
     echo "    agents:"
     echo "      hosts:"
-    for n in "${AGENTS[@]}"; do echo "        $n: { ansible_host: $n, barekube_address: $(node_ip "$n") }"; done
+    for n in "${AGENTS[@]}"; do echo "        $n: { ansible_host: $(node_ip "$n") }"; done
     echo "  vars:"
-    echo "    ansible_connection: community.general.lxd"
-  } >"$INVENTORY"
-  cat "$INVENTORY"
+    echo "    ansible_user: ubuntu"
+    echo "    ansible_become: true"
+    echo "    ansible_ssh_common_args: -o StrictHostKeyChecking=accept-new"
+  } >"$PLAYBOOK_DIR/inventory.yml"
+  cat "$PLAYBOOK_DIR/inventory.yml"
   run_playbook
   TOKEN="$(node master-1 cat /var/lib/rancher/k3s/server/token)"
   echo "::add-mask::$TOKEN"

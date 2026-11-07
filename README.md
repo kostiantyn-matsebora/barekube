@@ -15,14 +15,47 @@ Barekube is the low-level foundation of a bare-metal kubernetes platform tailore
 
 What barekube brings:
 
-- [k3s](https://k3s.io/) kubernetes cluster: initial master, additional masters (HA) and agent nodes.
-- [WireGuard](https://www.wireguard.com/) network between the nodes.
-- [gVisor](https://gvisor.dev/) - security layer for running containers efficiently and securely.
-- [Longhorn](https://longhorn.io/) storage prerequisites on the nodes.
+- <img src="assets/icons/k3s.svg" width="20" height="20" align="top"> [k3s](https://k3s.io/) kubernetes cluster: initial master, additional masters (HA) and agent nodes.
+- <img src="assets/icons/wireguard.svg" width="20" height="20" align="top"> [WireGuard](https://www.wireguard.com/) network between the nodes.
+- <img src="assets/icons/gvisor.svg" width="20" height="20" align="top"> [gVisor](https://gvisor.dev/) - security layer for running containers efficiently and securely.
+- <img src="assets/icons/longhorn.svg" width="20" height="20" align="top"> [Longhorn](https://longhorn.io/) storage prerequisites on the nodes.
+- <img src="assets/icons/ansible.svg" width="20" height="20" align="top"> [Ansible](https://www.ansible.com/) playbooks that build, change and remove a whole cluster from an inventory.
 
 Everything above that (HA API endpoint, load balancing, ingress, ...) is up to your platform.
 
-## Installation
+## Quick start: build a cluster
+
+1. Install [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) or [Docker](https://docs.docker.com/get-docker/) on your computer, and make sure you can log in to your machines with [SSH](https://www.openssh.com/).
+
+2. Download the playbooks:
+
+   ```shell
+   curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
+   cd barekube-ansible
+   ```
+
+3. Put your machines in the inventory, as `masters` and `agents`:
+
+   ```shell
+   cp inventory.example.yml inventory.yml
+   nano inventory.yml
+   ```
+
+4. Build the cluster (log in with a password instead of a key: `./play.sh -k`):
+
+   ```shell
+   ./play.sh
+   ```
+
+5. Use it. The cluster is now the current context in `~/.kube/config`:
+
+   ```shell
+   kubectl get nodes
+   ```
+
+Run `./play.sh` again to add machines or change settings. More: [settings, removing nodes, teardown](orchestration/ansible/README.md). To set up one node by hand, [use the CLI](#installing-the-cli).
+
+## Installing the CLI
 
 To install barekube CLI you simply must do the following steps:
 
@@ -75,7 +108,7 @@ rm SHA256SUMS barekube.sigstore.json
 
 `barekube upgrade` checks new releases itself.
 
-## Usage
+## Using the CLI
 
 After installation, you can use barekube CLI by running `barekube --help` command in your terminal. It will show you a help message with available commands:
 
@@ -133,33 +166,6 @@ barekube install agent-node  --yes --server https://192.168.1.10:6443
 ```
 
 When an install command finishes it prints `installed` or `already installed`, so a script can tell whether anything changed.
-
-## Building a whole cluster with Ansible
-
-If you have more than a couple of machines, describe them in an Ansible inventory and let the playbook in [`orchestration/ansible`](orchestration/ansible) do the rest. It installs a verified release of barekube on every machine, then the first master, the other masters one at a time, and the agents. The inventory is the only file you write: the hosts under `masters` and `agents` are your cluster, and the first master is the one the others join.
-
-```shell
-pipx install 'ansible-core>=2.18,<2.22'
-cd orchestration/ansible
-cp inventory.example.yml inventory.yml     # your machines and settings
-ansible-playbook -i inventory.yml site.yml
-```
-
-When it finishes, the kubeconfig is in `~/.barekube/default/kubeconfig`. Running the playbook again changes only what differs, so it is also how you add a machine or change a setting.
-
-The settings, all optional, are variables in the inventory:
-
-| Variable | Default | What it does |
-|---|---|---|
-| `barekube_version` | the version this playbook was released with | The barekube release to install. Its checksum and Sigstore signature are checked first (this needs `cosign`; set `barekube_verify_signature: false` to check only the checksum). |
-| `barekube_longhorn` | `true` | Install the packages Longhorn needs on every node. |
-| `barekube_gvisor_default` | `false` | Run new pods in the gVisor sandbox unless they say otherwise. See [gVisor as the default](#gvisor-as-the-default). |
-| `barekube_disable` | `[]` | k3s components to turn off, for example `[servicelb, traefik]`. |
-| `barekube_tls_san` | `[]` | Extra names for the API server certificate. |
-| `barekube_join_endpoint` | the first master | Where nodes join. Set it to your own virtual IP or load balancer if you have one; barekube does not install one. |
-| `barekube_extra_args` | empty | Anything else to pass to the k3s server. |
-
-The join token is read from the first master into memory and handed to the other nodes through the environment. It is never written to a file or shown in the output.
 
 ## gVisor as the default
 

@@ -21,7 +21,7 @@ The CLI is written with [bashly](https://bashly.dev) under `cli/`:
 | `cli/src/` | shared functions |
 | `cli/tests/` | unit and end-to-end tests |
 | `cli/release/barekube` | the generated single-file CLI users download |
-| `orchestration/ansible/` | the playbook that builds a whole cluster with the CLI; `ansible-lint` checks it in CI |
+| `orchestration/ansible/` | the playbooks that build, change and remove a whole cluster with the CLI, and `play.sh`, which runs them (in Docker if Ansible is not installed); `ansible-lint` checks them in CI |
 
 ## Working on a change
 
@@ -46,7 +46,7 @@ Pull requests are squash-merged and the branch is deleted after the merge.
 
 ## The cluster test
 
-The `E2E cluster` workflow builds a real cluster of three masters and two agents (LXD containers on one GitHub runner) with the barekube script of the commit, then checks it end to end. It builds it three times: with the barekube commands run node by node, and with the Ansible playbook with and without gVisor as the default. The checks cover the control plane, the WireGuard mesh, pod and service networking, gVisor, the Longhorn prerequisites, failover and the day-two commands. It runs every day, on demand from the Actions tab, and before every release; a release is not published unless it passes. It is not part of the pull request checks because it takes about ten minutes.
+The `E2E cluster` workflow builds a real cluster of three masters and two agents (LXD containers on one GitHub runner) with the barekube script of the commit, then checks it end to end. It builds it four times: with the barekube commands run node by node, and with the Ansible playbook (the release archive, run through `play.sh` in Docker over SSH), each with and without gVisor as the default. The checks cover the control plane, the WireGuard mesh, pod and service networking, gVisor, the Longhorn prerequisites, failover and the day-two commands. It runs every day, on demand from the Actions tab, and before every release; a release is not published unless it passes. It is not part of the pull request checks because it takes about ten minutes.
 
 The scripts are in `cli/tests/e2e/`.
 
@@ -62,6 +62,6 @@ Releases are published by CI from a version tag, never by hand.
    git push origin v0.3.0
    ```
 
-3. The release workflow runs the tests and the five-node cluster test, checks that the tag matches the version, builds the script, and publishes it to GitHub Releases with a checksum, a Sigstore signature and a provenance attestation.
+3. The release workflow runs the tests and the five-node cluster test, checks that the tag matches the version, builds the script, and publishes it to GitHub Releases with a checksum, a Sigstore signature and a provenance attestation, together with `barekube-ansible.tar.gz`, the packed playbooks (`orchestration/package.sh`), which has the same.
 
 The workflow refuses a tag that is not on `master`, that does not match `cli/bashly.yml`, or that differs from `barekube_version` in `orchestration/ansible/roles/barekube/defaults/main.yml`. Change both versions in the release commit.
