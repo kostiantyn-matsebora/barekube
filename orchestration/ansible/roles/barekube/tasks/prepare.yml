@@ -1,6 +1,17 @@
 ---
 # Installs the barekube CLI on the node and the packages the cluster needs.
 
+- name: Check the settings
+  ansible.builtin.assert:
+    that:
+      - barekube_disable is sequence and barekube_disable is not string
+      - barekube_tls_san is sequence and barekube_tls_san is not string
+      - groups['masters'] | default([]) | length > 0
+    fail_msg: >-
+      barekube_disable and barekube_tls_san must be lists (on the command line:
+      -e '{"barekube_disable": ["traefik"]}'), and the inventory needs a masters group.
+    quiet: true
+
 - name: Download and verify the release on this machine
   when: barekube_cli_path | length == 0
   run_once: true
