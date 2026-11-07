@@ -20,7 +20,7 @@ Every release publishes the archive with a checksum, a signature and a provenanc
 
 Without Docker, password login needs [`sshpass`](https://sshpass.sourceforge.net/) on your computer; the Docker image has it. Do not write passwords in the inventory; if you must, encrypt them with [Ansible Vault](https://docs.ansible.com/ansible/latest/vault_guide/).
 
-Without `-i` it reads `inventory.yml`, and without a playbook it runs `site.yml`. Anything else is passed to `ansible-playbook`.
+The inventory can be anywhere: `./play.sh -i ~/clusters/home/inventory.yml`. Without `-i` it reads `inventory.yml` in the directory you run it from. Without a playbook it runs `site.yml`. Anything else is passed to `ansible-playbook`.
 
 ## The inventory
 
