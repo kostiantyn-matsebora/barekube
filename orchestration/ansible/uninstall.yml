@@ -1,0 +1,33 @@
+---
+# Removes k3s from every node: the agents first, then the masters. This destroys
+# the cluster and its data, so it only runs when you say so:
+#
+#   ansible-playbook -i inventory.yml uninstall.yml -e barekube_confirm_uninstall=yes
+
+- name: Check this is wanted
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Require the confirmation
+      ansible.builtin.assert:
+        that: barekube_confirm_uninstall | default('') == 'yes'
+        fail_msg: This removes the cluster and its data from every node. Add -e barekube_confirm_uninstall=yes to go on.
+        quiet: true
+
+- name: Uninstall k3s from the agents
+  hosts: agents
+  tasks:
+    - name: Uninstall
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: uninstall
+
+# The masters one at a time, so the cluster goes down in order.
+- name: Uninstall k3s from the masters
+  hosts: masters
+  serial: 1
+  tasks:
+    - name: Uninstall
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: uninstall
