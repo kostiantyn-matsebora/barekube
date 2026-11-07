@@ -9,7 +9,9 @@ CONFIG_DIR=/var/lib/rancher/k3s/agent/etc/containerd
 KEYRING=/usr/share/keyrings/gvisor-archive-keyring.gpg
 
 setup() {
-  mock sudo curl cp grep dpkg
+  mock sudo curl dpkg
+  K3S_SYSTEMD_DIR="$TEST_TMP/systemd"
+  mkdir -p "$K3S_SYSTEMD_DIR"
   mock_capture_stdin sudo
   mock_output dpkg amd64
 }
@@ -104,37 +106,73 @@ test_runsc_runtime_config_declares_the_runtime() {
 test_register_gvisor_does_nothing_when_runtime_is_already_configured() {
   run register_gvisor_to_k3s
   assert_status 0
-  assert_calls "grep -q .containerd.runtimes.runsc $CONFIG_DIR/config.toml.tmpl"
+  assert_calls "sudo grep -qs .containerd.runtimes.runsc $CONFIG_DIR/config.toml.tmpl"
 }
 
 test_register_gvisor_adds_runtime_to_template_and_restarts_k3s() {
-  mock_fail grep
+  mock_fail sudo 'grep*'
   run register_gvisor_to_k3s
   assert_status 0
-  assert_called "cp $CONFIG_DIR/config.toml $CONFIG_DIR/config.toml.tmpl"
+  assert_called "sudo cp $CONFIG_DIR/config.toml $CONFIG_DIR/config.toml.tmpl"
   assert_called "sudo tee -a $CONFIG_DIR/config.toml.tmpl"
   assert_called "sudo systemctl restart k3s"
   assert_file_contains "$STDIN_LOG" '[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]'
   assert_file_contains "$STDIN_LOG" 'runtime_type = "io.containerd.runsc.v1"'
 }
 
+# Regression: an agent node has no k3s.service, so restarting it failed the
+# whole agent install ("Unit k3s.service not found").
+test_register_gvisor_restarts_the_agent_service_on_agent_nodes() {
+  : >"$K3S_SYSTEMD_DIR/k3s-agent.service"
+  mock_fail sudo 'grep*'
+  run register_gvisor_to_k3s
+  assert_status 0
+  assert_called "sudo systemctl restart k3s-agent"
+  refute_called "sudo systemctl restart k3s"
+  assert_output_contains "Restarting k3s-agent..."
+}
+
+test_k3s_service_name_is_k3s_on_servers_and_k3s_agent_on_agents() {
+  assert_eq "k3s" "$(k3s_service_name)"
+  : >"$K3S_SYSTEMD_DIR/k3s-agent.service"
+  assert_eq "k3s-agent" "$(k3s_service_name)"
+}
+
+# Regression: the template was copied without sudo, which fails for anyone who
+# is not root because the containerd directory belongs to root.
+test_register_gvisor_copies_the_template_with_sudo() {
+  mock_fail sudo 'grep*'
+  run register_gvisor_to_k3s
+  refute_called "cp $CONFIG_DIR/config.toml $CONFIG_DIR/config.toml.tmpl"
+  assert_called "sudo cp $CONFIG_DIR/config.toml $CONFIG_DIR/config.toml.tmpl"
+}
+
+test_register_gvisor_stops_when_the_template_cannot_be_copied() {
+  mock_fail sudo 'grep*'
+  # grep and cp both fail for this mock; only the copy failure must be reported
+  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in grep) return 1 ;; cp) return 1 ;; esac; }
+  run register_gvisor_to_k3s
+  assert_status 1
+  assert_output_contains "Failed to copy the containerd configuration"
+  refute_called_matching '^sudo tee'
+}
+
 test_register_gvisor_reports_template_write_failure() {
-  mock_fail grep
-  mock_fail sudo 'tee*'
+  mock_fail sudo 'grep*'
+  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in grep) return 1 ;; tee) return 1 ;; esac; }
   run register_gvisor_to_k3s
   assert_output_contains "Failed to add runsc runtime to containerd configuration"
   refute_called "sudo systemctl restart k3s"
 }
 
 test_register_gvisor_reports_restart_failure() {
-  mock_fail grep
-  mock_fail sudo 'systemctl*'
+  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in grep) return 1 ;; systemctl) return 1 ;; esac; }
   run register_gvisor_to_k3s
   assert_output_contains "Failed to register gVisor to k3s"
 }
 
 test_setup_gvisor_installs_then_registers() {
-  mock_fail grep
+  mock_fail sudo 'grep*'
   run setup_gvisor
   assert_status 0
   assert_called "sudo apt-get install -y runsc"

@@ -18,6 +18,19 @@ STUB
   chmod +x "$STUBS/$1"
 }
 
+# sudo that reports "not configured yet" to the gVisor grep and otherwise just
+# records the call and optionally prints STDOUT.
+make_sudo_stub() {
+  cat >"$STUBS/sudo" <<STUB
+#!/bin/sh
+echo "sudo \$*" >>"$CALLS"
+[ "\$1" = grep ] && exit 1
+[ -z "$1" ] || echo "$1"
+exit 0
+STUB
+  chmod +x "$STUBS/sudo"
+}
+
 setup() {
   STUBS="$TEST_TMP/stubs"
   mkdir -p "$STUBS" "$TEST_TMP/home/bin"
@@ -25,11 +38,9 @@ setup() {
   # /usr/local/bin is left out so a real k3s install cannot leak into the tests.
   PATH="$STUBS:/usr/bin:/bin"
   export HOME PATH
-  make_stub sudo
+  make_sudo_stub
   make_stub curl
   make_stub sh
-  make_stub cp
-  make_stub grep 1
   make_stub dpkg 0 amd64
   make_stub sha256sum
   make_stub cosign
@@ -223,7 +234,7 @@ test_install_gvisor_installs_and_registers_the_runtime() {
 }
 
 test_install_initial_master_without_extra_options() {
-  make_stub sudo 0 "node-token"
+  make_sudo_stub "node-token"
   run_input "n" barekube_cli install initial-master --reinstall
   assert_status 0
   assert_called "sh -s - server --cluster-init --flannel-backend wireguard-native"
@@ -263,7 +274,7 @@ test_install_agent_node_joins_the_cluster() {
 # ------------------------------------------ non-interactive installs (stdin is empty)
 
 test_install_initial_master_with_yes_never_prompts() {
-  make_stub sudo 0 "node-token"
+  make_sudo_stub "node-token"
   run barekube_cli install initial-master --reinstall --yes
   assert_status 0
   assert_called "sh -s - server --cluster-init --flannel-backend wireguard-native"

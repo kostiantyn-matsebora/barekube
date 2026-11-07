@@ -200,11 +200,40 @@ MANIFEST
 
 # ------------------------------------------------------ Longhorn prerequisites
 
+runsc_runtime_stanzas() {
+  node "$1" sh -c "grep -c 'containerd.runtimes.runsc\\]' /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl"
+}
+
+check_gvisor_is_installed_on_every_node() {
+  for n in "${NODES[@]}"; do
+    node "$n" runsc --version >/dev/null || { log "runsc is missing on $n"; return 1; }
+    node "$n" sh -c 'command -v containerd-shim-runsc-v1' >/dev/null || { log "the runsc containerd shim is missing on $n"; return 1; }
+    expect_eq "$(runsc_runtime_stanzas "$n")" 1 "runsc runtime registered in the k3s containerd template on $n" || return 1
+  done
+}
+
+check_gvisor_install_command_can_be_rerun() {
+  node agent-1 barekube install gvisor >/dev/null
+  node master-2 barekube install gvisor >/dev/null
+  for n in agent-1 master-2; do
+    expect_eq "$(runsc_runtime_stanzas "$n")" 1 "runsc runtime stanzas on $n after re-running" || return 1
+    wait_for 240 "$n is Ready after re-running" node_ready "$n" || return 1
+  done
+}
+
+# ------------------------------------------------------ Longhorn prerequisites
+
 check_longhorn_prerequisites() {
   for n in "${NODES[@]}"; do
-    node "$n" dpkg -s open-iscsi nfs-common >/dev/null || { log "$n lacks Longhorn packages"; return 1; }
+    node "$n" dpkg -s open-iscsi nfs-common curl grep bash >/dev/null || { log "$n lacks Longhorn packages"; return 1; }
+    node "$n" iscsiadm --version >/dev/null || { log "iscsiadm is missing on $n"; return 1; }
     node "$n" systemctl is-active iscsid >/dev/null || { log "iscsid is not running on $n"; return 1; }
   done
+}
+
+check_longhorn_install_command_can_be_rerun() {
+  node agent-1 barekube install longhorn-dependencies >/dev/null
+  node agent-1 systemctl is-active iscsid >/dev/null
 }
 
 # ----------------------------------------------------- failures and day two
@@ -261,8 +290,11 @@ check "echo pods spread over all five nodes" check_pods_spread_over_every_node
 check "pods reach each other across nodes" check_pod_to_pod_across_nodes
 check "services and DNS resolve" check_service_and_dns
 check "a NodePort answers on every node" check_nodeport_on_every_node
+check "gVisor is installed and registered with k3s on every node" check_gvisor_is_installed_on_every_node
 check "a pod runs sandboxed by gVisor" check_gvisor_runtime
 check "Longhorn prerequisites are in place on every node" check_longhorn_prerequisites
+check "re-running the gVisor install keeps the cluster healthy" check_gvisor_install_command_can_be_rerun
+check "re-running the Longhorn dependencies install works" check_longhorn_install_command_can_be_rerun
 check "re-running installs is idempotent" check_idempotent_install
 check "the cluster survives losing a master" check_cluster_survives_losing_a_master
 check "an agent can be stopped and started" check_agent_stop_and_start
