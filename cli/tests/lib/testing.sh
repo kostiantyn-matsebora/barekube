@@ -44,6 +44,15 @@ refute_contains() {
   [[ "$1" != *"$2"* ]] || fail "expected [$1] NOT to contain [$2]"
 }
 
+# assert_output_line LINE: some line of the output is exactly LINE.
+assert_output_line() {
+  local line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == "$1" ]] && return 0
+  done <<<"$output"
+  fail "expected an output line [$1]; output:"$'\n'"$output"
+}
+
 assert_output_contains() { assert_contains "$output" "$1"; }
 refute_output_contains() { refute_contains "$output" "$1"; }
 

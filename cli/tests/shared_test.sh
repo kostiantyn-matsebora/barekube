@@ -129,6 +129,12 @@ test_exit_if_error_propagates_a_failure_status() {
   [[ "$status" -ne 0 ]] || fail "exit status was 0"
 }
 
+test_report_state_prints_a_plain_line() {
+  run report_state "already installed"
+  assert_status 0
+  assert_eq "already installed" "$output"
+}
+
 test_echo_final_prints_success_message_after_success() {
   run after_success echo_final "failed msg" "all good"
   assert_status 0

@@ -46,30 +46,6 @@ test_normalize_input_passes_everything_after_double_dash_through() {
   assert_eq "--|-abc|--flag=value" "$(IFS='|'; echo "${input[*]}")"
 }
 
-# --------------------------------------------------------- inspect_args
-
-test_inspect_args_reports_no_args() {
-  capture inspect_args
-  assert_eq "args: none" "$output"
-}
-
-test_inspect_args_lists_sorted_args() {
-  args[--yes]=1
-  args[--reinstall]=1
-  capture inspect_args
-  assert_eq $'args:\n- ${args[--reinstall]} = 1\n- ${args[--yes]} = 1' "$output"
-}
-
-test_inspect_args_lists_deps_and_environment_variables() {
-  deps[wget]=/usr/bin/wget
-  args[--yes]=1
-  env_var_names=(B_VAR A_VAR)
-  A_VAR=a
-  capture inspect_args
-  assert_output_contains '- ${deps[wget]} = /usr/bin/wget'
-  assert_output_contains $'environment variables:\n- $A_VAR = a\n- $B_VAR = '
-}
-
 test_version_command_prints_the_version() {
   version=1.2.3
   capture version_command

@@ -134,6 +134,26 @@ barekube_install_initial_master_usage() {
     printf "    Reinstall k3s\n"
     echo
 
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--yes, -y")"
+    printf "    Do not prompt; fail when a required value is missing\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--tls-san SAN (repeatable)")"
+    printf "    Add a TLS SAN to the API server certificate (repeatable)\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--disable COMPONENT (repeatable)")"
+    printf "    Disable a packaged k3s component, for example traefik (repeatable)\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--extra-args ARGUMENTS")"
+    printf "    Additional k3s server arguments, passed as is\n"
+    echo
+
     # :command.usage_fixed_flags
     printf "  %s\n" "$(magenta "--help, -h")"
     printf "    Show this help\n"
@@ -161,9 +181,42 @@ barekube_install_master_node_usage() {
     printf "    Reinstall k3s\n"
     echo
 
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--server URL")"
+    printf "    URL of the cluster to join, for example https://192.168.1.1:6443\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--yes, -y")"
+    printf "    Do not prompt; fail when a required value is missing\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--tls-san SAN (repeatable)")"
+    printf "    Add a TLS SAN to the API server certificate (repeatable)\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--disable COMPONENT (repeatable)")"
+    printf "    Disable a packaged k3s component, for example traefik (repeatable)\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--extra-args ARGUMENTS")"
+    printf "    Additional k3s server arguments, passed as is\n"
+    echo
+
     # :command.usage_fixed_flags
     printf "  %s\n" "$(magenta "--help, -h")"
     printf "    Show this help\n"
+    echo
+
+    # :command.usage_environment_variables
+    printf "%s\n" "$(bold "Environment Variables:")"
+
+    # :environment_variable.usage
+    printf "  %s\n" "$(cyan "K3S_TOKEN")"
+    printf "    Cluster join token (prompted for when unset)\n"
     echo
 
   fi
@@ -188,9 +241,27 @@ barekube_install_agent_node_usage() {
     printf "    Reinstall k3s\n"
     echo
 
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--server URL")"
+    printf "    URL of the cluster to join, for example https://192.168.1.1:6443\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--yes, -y")"
+    printf "    Do not prompt; fail when a required value is missing\n"
+    echo
+
     # :command.usage_fixed_flags
     printf "  %s\n" "$(magenta "--help, -h")"
     printf "    Show this help\n"
+    echo
+
+    # :command.usage_environment_variables
+    printf "%s\n" "$(bold "Environment Variables:")"
+
+    # :environment_variable.usage
+    printf "  %s\n" "$(cyan "K3S_TOKEN")"
+    printf "    Cluster join token (prompted for when unset)\n"
     echo
 
   fi
@@ -315,13 +386,19 @@ barekube_k3s_uninstall_usage() {
   printf "barekube k3s uninstall - Uninstall k3s and all related containers\n\n"
 
   printf "%s\n" "$(bold "Usage:")"
-  printf "  barekube k3s uninstall\n"
+  printf "  barekube k3s uninstall [OPTIONS]\n"
   printf "  barekube k3s uninstall --help | -h\n"
   echo
 
   # :command.long_usage
   if [[ -n "$long_usage" ]]; then
     printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_flags
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--yes, -y")"
+    printf "    Do not ask for confirmation\n"
+    echo
 
     # :command.usage_fixed_flags
     printf "  %s\n" "$(magenta "--help, -h")"
@@ -644,11 +721,16 @@ setup_gvisor() {
 K3S_INSTALL_URL="https://get.k3s.io"
 K3S_FLANNEL_BACKEND="wireguard-native"
 
+# Set by the install commands from the repeatable --tls-san and --disable flags.
+TLS_SANS=()
+DISABLE_COMPONENTS=()
+
 check_k3s_installed() {
     echo_message "Checking if k3s is already installed..."
     if check_if_command_exists "k3s"
     then
         echo_info "k3s is already installed."
+        report_state "already installed"
         if [[ "$1" -ne "1" ]]
         then
             exit 0
@@ -656,8 +738,31 @@ check_k3s_installed() {
     fi
 }
 
+# Builds the extra k3s server arguments. Values given as flags are used as is
+# and never prompted for; with --yes and no flags nothing is asked or added;
+# otherwise the user is asked interactively.
+# Usage: gather_additional_args [--yes] [EXTRA_ARGS]
 gather_additional_args() {
-    local ADDITIONAL_ARGS=""
+    local YES="$1" EXTRA="$2" ADDITIONAL_ARGS="" ITEM
+    if ((${#DISABLE_COMPONENTS[@]} + ${#TLS_SANS[@]})) || [[ -n "$EXTRA" ]]
+    then
+        for ITEM in "${DISABLE_COMPONENTS[@]}"
+        do
+            ADDITIONAL_ARGS="$ADDITIONAL_ARGS --disable=$ITEM"
+        done
+        for ITEM in "${TLS_SANS[@]}"
+        do
+            ADDITIONAL_ARGS="$ADDITIONAL_ARGS --tls-san $ITEM"
+        done
+        if [[ -n "$EXTRA" ]]
+        then
+            ADDITIONAL_ARGS="$ADDITIONAL_ARGS $EXTRA"
+        fi
+        echo "$ADDITIONAL_ARGS"
+        return 0
+    fi
+    [[ "$(is_automatic_mode "$YES")" == "0" ]] && return 0
+
     yes_or_no "Do you want to set additional parameters?" || return 0
     if yes_or_no "Do you want to disable load balancer"
     then
@@ -678,15 +783,44 @@ gather_additional_args() {
     echo "$ADDITIONAL_ARGS"
 }
 
-gather_master_params() {
-    local MASTER_URL TOKEN
-    MASTER_URL=$(read_required_input "Enter the master URL(e.g. https://192.168.1.1:6443):" "Master URL is required.") || return 1
-    TOKEN=$(read_required_input "Enter the token:" "Token is required.") || return 1
-    echo " --server=$MASTER_URL --token=$TOKEN"
+# Prints the cluster URL to join: the flag value, else a prompt (never with --yes).
+# Usage: resolve_server_url SERVER [--yes]
+resolve_server_url() {
+    if [[ -n "$1" ]]
+    then
+        echo "$1"
+        return 0
+    fi
+    if [[ "$(is_automatic_mode "$2")" == "0" ]]
+    then
+        echo_error "--server is required with --yes." >&2
+        return 1
+    fi
+    read_required_input "Enter the master URL(e.g. https://192.168.1.1:6443):" "Master URL is required."
+}
+
+# Prints the join token: the K3S_TOKEN environment variable, else a prompt
+# (never with --yes). There is deliberately no --token flag: it would show in
+# ps and shell history.
+# Usage: resolve_token [--yes]
+resolve_token() {
+    if [[ -n "${K3S_TOKEN:-}" ]]
+    then
+        echo "$K3S_TOKEN"
+        return 0
+    fi
+    if [[ "$(is_automatic_mode "$1")" == "0" ]]
+    then
+        echo_error "K3S_TOKEN is required with --yes." >&2
+        return 1
+    fi
+    read_required_input "Enter the token:" "Token is required."
 }
 
 # Pipes the official k3s installer into sh. The arguments are split on
 # whitespace only - never evaluated - so input cannot inject shell syntax.
+# The join token is not an argument: the installer reads K3S_TOKEN from the
+# environment, which keeps it out of ps and the logged command line.
 run_k3s_installer() {
     local -a INSTALLER_ARGS
     read -ra INSTALLER_ARGS <<<"$*"
@@ -709,14 +843,16 @@ show_k3s_token() {
     echo_message "Use it for joining agents and other master nodes to the cluster."
 }
 
+# Usage: install_k3s_master SERVER_URL [ADDITIONAL_ARGS]; K3S_TOKEN exported.
 install_k3s_master() {
     echo_message "Installing k3s master node..."
-    run_k3s_installer server "$1" --flannel-backend "$K3S_FLANNEL_BACKEND" "$2"
+    run_k3s_installer server --server "$1" --flannel-backend "$K3S_FLANNEL_BACKEND" "$2"
 }
 
+# Usage: install_k3s_agent SERVER_URL; K3S_TOKEN exported.
 install_k3s_agent() {
     echo_message "Installing k3s agent node..."
-    run_k3s_installer agent "$1"
+    K3S_URL="$1" run_k3s_installer agent
 }
 
 start_k3s_master() {
@@ -739,8 +875,9 @@ killall_k3s() {
     run_privileged "Killing k3s..." "Failed to kill k3s" /usr/local/bin/k3s-killall.sh
 }
 
+# Usage: uninstall_k3s [--yes]
 uninstall_k3s() {
-    if yes_or_no "Do you want to uninstall k3s?"
+    if yes_or_no "Do you want to uninstall k3s?" "$(is_automatic_mode "$1")"
     then
         run_privileged "Uninstalling k3s..." "Failed to uninstall k3s" /usr/local/bin/k3s-uninstall.sh
     fi
@@ -867,6 +1004,12 @@ function exit_if_error(){
     fi
 }
 
+# Prints a plain, stable state line ("installed", "already installed") that
+# tools driving the CLI can match on.
+function report_state(){
+    echo "$1"
+}
+
 function echo_final(){
     local STATUS=$?
     if [ "$STATUS" -ne "0" ]
@@ -929,11 +1072,6 @@ enable_autoupdate() {
 barekube_install_dependencies_command() {
 
   # ./commands/install/dependencies.sh
-  echo "# This file is located at './commands/install/dependencies.sh'."
-  echo "# It contains the implementation for the 'barekube install dependencies' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_install_dependencies_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   echo_info "Installing dependencies..."
   update_packages
   install_wireguard
@@ -945,20 +1083,18 @@ barekube_install_dependencies_command() {
 barekube_install_initial_master_command() {
 
   # ./commands/install/initial-master.sh
-  echo "# This file is located at './commands/install/kubernetes/initial-master.sh'."
-  echo "# It contains the implementation for the 'barekube install kubernetes initial-master' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_install_kubernetes_initial_master_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   # shellcheck disable=SC2154
   check_k3s_installed "${args[--reinstall]}"
+  eval "TLS_SANS=(${args[--tls-san]:-})"
+  eval "DISABLE_COMPONENTS=(${args[--disable]:-})"
   echo_info "Installing initial k3s master node..."
-  ADDITIONAL_ARGS=$(gather_additional_args)
+  ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
 
   install_k3s_initial_master "${ADDITIONAL_ARGS}"
   setup_gvisor
   show_k3s_token
   echo_final "Failed to install initial k3s master node." "Initial k3s master node installed successfully."
+  report_state "installed"
 
 }
 
@@ -966,23 +1102,23 @@ barekube_install_initial_master_command() {
 barekube_install_master_node_command() {
 
   # ./commands/install/master-node.sh
-  echo "# This file is located at './commands/install/master.sh'."
-  echo "# It contains the implementation for the 'barekube install master' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_install_master_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   # shellcheck disable=SC2154
   check_k3s_installed "${args[--reinstall]}"
-  MASTER_PARAMS=$(gather_master_params) || exit 1
-  ADDITIONAL_ARGS=$(gather_additional_args)
+  SERVER_URL=$(resolve_server_url "${args[--server]:-}" "${args[--yes]:+--yes}") || exit 1
+  K3S_TOKEN=$(resolve_token "${args[--yes]:+--yes}") || exit 1
+  export K3S_TOKEN
+  eval "TLS_SANS=(${args[--tls-san]:-})"
+  eval "DISABLE_COMPONENTS=(${args[--disable]:-})"
+  ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
   echo_info "Installing master node..."
 
-  echo_info "Master parameters: $MASTER_PARAMS"
+  echo_info "Joining cluster at: $SERVER_URL"
   echo_info "Additional arguments: $ADDITIONAL_ARGS"
 
-  install_k3s_master "$MASTER_PARAMS" "$ADDITIONAL_ARGS"
+  install_k3s_master "$SERVER_URL" "$ADDITIONAL_ARGS"
   setup_gvisor
   echo_final "Failed to install k3s master node." "Another k3s master node installed successfully."
+  report_state "installed"
 
 }
 
@@ -990,19 +1126,17 @@ barekube_install_master_node_command() {
 barekube_install_agent_node_command() {
 
   # ./commands/install/agent-node.sh
-  echo "# This file is located at './commands/install/master.sh'."
-  echo "# It contains the implementation for the 'barekube install master' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_install_master_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   # shellcheck disable=SC2154
   check_k3s_installed "${args[--reinstall]}"
-  MASTER_PARAMS=$(gather_master_params) || exit 1
+  SERVER_URL=$(resolve_server_url "${args[--server]:-}" "${args[--yes]:+--yes}") || exit 1
+  K3S_TOKEN=$(resolve_token "${args[--yes]:+--yes}") || exit 1
+  export K3S_TOKEN
   echo_info "Installing agent node..."
 
-  install_k3s_agent "$MASTER_PARAMS"
+  install_k3s_agent "$SERVER_URL"
   setup_gvisor
   echo_final "Failed to install k3s agent node." "Another k3s agent node installed successfully."
+  report_state "installed"
 
 }
 
@@ -1010,11 +1144,6 @@ barekube_install_agent_node_command() {
 barekube_install_gvisor_command() {
 
   # ./commands/install/gvisor.sh
-  echo "# This file is located at './commands/install/gvisor.sh'."
-  echo "# It contains the implementation for the 'barekube install gvisor' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_install_gvisor_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   setup_gvisor
 
 }
@@ -1023,12 +1152,6 @@ barekube_install_gvisor_command() {
 barekube_install_longhorn_dependencies_command() {
 
   # ./commands/install/longhorn-dependencies.sh
-  echo "# This file is located at './commands/longhorn/install-dependencies.sh'."
-  echo "# It contains the implementation for the 'barekube longhorn install-dependencies' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_longhorn_install_dependencies_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
-
   echo_info "Installing longhorn dependencies..."
   install_longhorn_dependencies
 
@@ -1041,11 +1164,6 @@ barekube_install_longhorn_dependencies_command() {
 barekube_k3s_start_command() {
 
   # ./commands/k3s/start.sh
-  echo "# This file is located at './commands/k3s/start.sh'."
-  echo "# It contains the implementation for the 'barekube k3s start' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_start_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   start_k3s_master
 
 }
@@ -1054,11 +1172,6 @@ barekube_k3s_start_command() {
 barekube_k3s_stop_command() {
 
   # ./commands/k3s/stop.sh
-  echo "# This file is located at './commands/k3s/stop.sh'."
-  echo "# It contains the implementation for the 'barekube k3s stop' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_stop_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   stop_k3s_master
 
 }
@@ -1067,12 +1180,8 @@ barekube_k3s_stop_command() {
 barekube_k3s_uninstall_command() {
 
   # ./commands/k3s/uninstall.sh
-  echo "# This file is located at './commands/k3s/uninstall.sh'."
-  echo "# It contains the implementation for the 'barekube k3s uninstall' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_uninstall_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
-  uninstall_k3s
+  # shellcheck disable=SC2154
+  uninstall_k3s "${args[--yes]:+--yes}"
 
 }
 
@@ -1080,11 +1189,6 @@ barekube_k3s_uninstall_command() {
 barekube_k3s_killall_command() {
 
   # ./commands/k3s/killall.sh
-  echo "# This file is located at './commands/k3s/killall.sh'."
-  echo "# It contains the implementation for the 'barekube k3s killall' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_killall_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   killall_k3s
 
 }
@@ -1093,11 +1197,6 @@ barekube_k3s_killall_command() {
 barekube_k3s_start_agent_command() {
 
   # ./commands/k3s/start-agent.sh
-  echo "# This file is located at './commands/k3s/start-agent.sh'."
-  echo "# It contains the implementation for the 'barekube k3s start-agent' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_start_agent_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   start_k3s_agent
 
 }
@@ -1106,11 +1205,6 @@ barekube_k3s_start_agent_command() {
 barekube_k3s_stop_agent_command() {
 
   # ./commands/k3s/stop-agent.sh
-  echo "# This file is located at './commands/k3s/stop-agent.sh'."
-  echo "# It contains the implementation for the 'barekube k3s stop-agent' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_k3s_stop_agent_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   stop_k3s_agent
 
 }
@@ -1119,11 +1213,6 @@ barekube_k3s_stop_agent_command() {
 barekube_system_enable_autoupdate_command() {
 
   # ./commands/system/enable-autoupdate.sh
-  echo "# This file is located at './commands/system/enable-autoupdate.sh'."
-  echo "# It contains the implementation for the 'barekube system enable-autoupdate' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_system_enable_autoupdate_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   enable_autoupdate
 
 }
@@ -1132,11 +1221,6 @@ barekube_system_enable_autoupdate_command() {
 barekube_upgrade_command() {
 
   # ./commands/upgrade.sh
-  echo "# This file is located at './commands/upgrade.sh'."
-  echo "# It contains the implementation for the 'barekube upgrade' command."
-  echo "# The code you write here will be wrapped by a function named 'barekube_upgrade_command()'."
-  echo "# Feel free to edit this file; your changes will persist when regenerating."
-  inspect_args
   # shellcheck disable=SC2154
   upgrade_barekube "${args[--yes]:+--yes}"
 
@@ -1423,6 +1507,66 @@ barekube_install_initial_master_parse_requirements() {
         shift
         ;;
 
+      # :flag.case
+      --yes | -y)
+
+        # :flag.case_no_arg
+        args['--yes']=1
+        shift
+        ;;
+
+      # :flag.case
+      --tls-san)
+
+        # :flag.case_arg
+        if [[ -n ${2+x} ]]; then
+          escaped="$(printf '%q' "$2")"
+          if [[ -z ${args['--tls-san']+x} ]]; then
+            args['--tls-san']="$escaped"
+          else
+            args['--tls-san']="${args['--tls-san']} $escaped"
+          fi
+          shift
+          shift
+        else
+          printf "%s\n" "--tls-san requires an argument: --tls-san SAN" >&2
+          exit 1
+        fi
+        ;;
+
+      # :flag.case
+      --disable)
+
+        # :flag.case_arg
+        if [[ -n ${2+x} ]]; then
+          escaped="$(printf '%q' "$2")"
+          if [[ -z ${args['--disable']+x} ]]; then
+            args['--disable']="$escaped"
+          else
+            args['--disable']="${args['--disable']} $escaped"
+          fi
+          shift
+          shift
+        else
+          printf "%s\n" "--disable requires an argument: --disable COMPONENT" >&2
+          exit 1
+        fi
+        ;;
+
+      # :flag.case
+      --extra-args)
+
+        # :flag.case_arg
+        if [[ -n ${2+x} ]]; then
+          args['--extra-args']="$2"
+          shift
+          shift
+        else
+          printf "%s\n" "--extra-args requires an argument: --extra-args ARGUMENTS" >&2
+          exit 1
+        fi
+        ;;
+
       -?*)
         printf "invalid option: %s\n" "$key" >&2
         exit 1
@@ -1460,6 +1604,10 @@ barekube_install_master_node_parse_requirements() {
     esac
   done
 
+  # :command.environment_variables_filter
+
+  env_var_names+=("K3S_TOKEN")
+
   # :command.command_filter
   action="install master-node"
 
@@ -1473,6 +1621,80 @@ barekube_install_master_node_parse_requirements() {
         # :flag.case_no_arg
         args['--reinstall']=1
         shift
+        ;;
+
+      # :flag.case
+      --server)
+
+        # :flag.case_arg
+        if [[ -n ${2+x} ]]; then
+          args['--server']="$2"
+          shift
+          shift
+        else
+          printf "%s\n" "--server requires an argument: --server URL" >&2
+          exit 1
+        fi
+        ;;
+
+      # :flag.case
+      --yes | -y)
+
+        # :flag.case_no_arg
+        args['--yes']=1
+        shift
+        ;;
+
+      # :flag.case
+      --tls-san)
+
+        # :flag.case_arg
+        if [[ -n ${2+x} ]]; then
+          escaped="$(printf '%q' "$2")"
+          if [[ -z ${args['--tls-san']+x} ]]; then
+            args['--tls-san']="$escaped"
+          else
+            args['--tls-san']="${args['--tls-san']} $escaped"
+          fi
+          shift
+          shift
+        else
+          printf "%s\n" "--tls-san requires an argument: --tls-san SAN" >&2
+          exit 1
+        fi
+        ;;
+
+      # :flag.case
+      --disable)
+
+        # :flag.case_arg
+        if [[ -n ${2+x} ]]; then
+          escaped="$(printf '%q' "$2")"
+          if [[ -z ${args['--disable']+x} ]]; then
+            args['--disable']="$escaped"
+          else
+            args['--disable']="${args['--disable']} $escaped"
+          fi
+          shift
+          shift
+        else
+          printf "%s\n" "--disable requires an argument: --disable COMPONENT" >&2
+          exit 1
+        fi
+        ;;
+
+      # :flag.case
+      --extra-args)
+
+        # :flag.case_arg
+        if [[ -n ${2+x} ]]; then
+          args['--extra-args']="$2"
+          shift
+          shift
+        else
+          printf "%s\n" "--extra-args requires an argument: --extra-args ARGUMENTS" >&2
+          exit 1
+        fi
         ;;
 
       -?*)
@@ -1512,6 +1734,10 @@ barekube_install_agent_node_parse_requirements() {
     esac
   done
 
+  # :command.environment_variables_filter
+
+  env_var_names+=("K3S_TOKEN")
+
   # :command.command_filter
   action="install agent-node"
 
@@ -1524,6 +1750,28 @@ barekube_install_agent_node_parse_requirements() {
 
         # :flag.case_no_arg
         args['--reinstall']=1
+        shift
+        ;;
+
+      # :flag.case
+      --server)
+
+        # :flag.case_arg
+        if [[ -n ${2+x} ]]; then
+          args['--server']="$2"
+          shift
+          shift
+        else
+          printf "%s\n" "--server requires an argument: --server URL" >&2
+          exit 1
+        fi
+        ;;
+
+      # :flag.case
+      --yes | -y)
+
+        # :flag.case_no_arg
+        args['--yes']=1
         shift
         ;;
 
@@ -1854,6 +2102,13 @@ barekube_k3s_uninstall_parse_requirements() {
   while [[ $# -gt 0 ]]; do
     key="$1"
     case "$key" in
+      # :flag.case
+      --yes | -y)
+
+        # :flag.case_no_arg
+        args['--yes']=1
+        shift
+        ;;
 
       -?*)
         printf "invalid option: %s\n" "$key" >&2
@@ -2189,7 +2444,7 @@ barekube_upgrade_parse_requirements() {
 
 # :command.initialize
 initialize() {
-  declare -g version="0.2.0"
+  declare -g version="0.3.0"
 
 }
 

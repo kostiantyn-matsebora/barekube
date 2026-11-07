@@ -42,6 +42,22 @@ To install barekube CLI you simply must do the following steps:
   source $HOME/.bashrc
   ```
 
+## Non-interactive usage
+
+Every value the install commands ask for can be given up front, so barekube can be driven by scripts and orchestration tools. `--yes` turns every prompt into an error instead of waiting for input. The join token is read from the `K3S_TOKEN` environment variable; there is deliberately no `--token` flag, because it would show up in `ps` and shell history.
+
+```shell
+# First master
+barekube install initial-master --yes --tls-san k8s.home.lan --disable traefik
+
+# Another master or an agent
+export K3S_TOKEN='<token printed by the first master>'
+barekube install master-node --yes --server https://192.168.1.10:6443
+barekube install agent-node  --yes --server https://192.168.1.10:6443
+```
+
+The install commands print a plain `installed` or `already installed` line, so callers can tell whether anything changed.
+
 ## Usage
 
 After installation, you can use barekube CLI by running `barekube --help` command in your terminal. It will show you a help message with available commands:

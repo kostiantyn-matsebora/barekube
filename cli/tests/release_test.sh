@@ -183,6 +183,12 @@ test_k3s_uninstall_asks_before_uninstalling() {
   assert_calls "sudo /usr/local/bin/k3s-uninstall.sh"
 }
 
+test_k3s_uninstall_with_yes_does_not_ask() {
+  run barekube_cli k3s uninstall --yes
+  assert_status 0
+  assert_calls "sudo /usr/local/bin/k3s-uninstall.sh"
+}
+
 test_k3s_uninstall_can_be_declined() {
   run_input "n" barekube_cli k3s uninstall
   assert_status 0
@@ -224,18 +230,111 @@ test_install_initial_master_without_extra_options() {
   assert_output_contains "Initial k3s master node installed successfully."
 }
 
+# A stand-in for `sh` that also records the join variables the installer reads.
+make_installer_stub() {
+  cat >"$STUBS/sh" <<STUB
+#!/bin/sh
+echo "sh \$*" >>"$CALLS"
+echo "env K3S_TOKEN=\$K3S_TOKEN K3S_URL=\$K3S_URL" >>"$CALLS"
+STUB
+  chmod +x "$STUBS/sh"
+}
+
 test_install_master_node_joins_the_cluster() {
+  make_installer_stub
   run_input $'https://10.0.0.1:6443\nsecret\nn' barekube_cli install master-node --reinstall
   assert_status 0
-  assert_called "sh -s - server --server=https://10.0.0.1:6443 --token=secret --flannel-backend wireguard-native"
+  assert_called "sh -s - server --server https://10.0.0.1:6443 --flannel-backend wireguard-native"
+  assert_called "env K3S_TOKEN=secret K3S_URL="
   assert_output_contains "Another k3s master node installed successfully."
 }
 
 test_install_agent_node_joins_the_cluster() {
+  make_installer_stub
   run_input $'https://10.0.0.1:6443\nsecret' barekube_cli install agent-node --reinstall
   assert_status 0
-  assert_called "sh -s - agent --server=https://10.0.0.1:6443 --token=secret"
+  assert_called "sh -s - agent"
+  assert_called "env K3S_TOKEN=secret K3S_URL=https://10.0.0.1:6443"
   assert_output_contains "Another k3s agent node installed successfully."
+}
+
+# ------------------------------------------ non-interactive installs (stdin is empty)
+
+test_install_initial_master_with_yes_never_prompts() {
+  make_stub sudo 0 "node-token"
+  run barekube_cli install initial-master --reinstall --yes
+  assert_status 0
+  assert_called "sh -s - server --cluster-init --flannel-backend wireguard-native"
+  assert_output_line "installed"
+}
+
+test_install_initial_master_takes_k3s_options_from_flags() {
+  run barekube_cli install initial-master --reinstall --yes \
+    --tls-san k8s.home.lan --tls-san 192.168.1.100 --disable servicelb --disable traefik \
+    --extra-args=--node-label=zone=a
+  assert_status 0
+  assert_called "sh -s - server --cluster-init --flannel-backend wireguard-native --disable=servicelb --disable=traefik --tls-san k8s.home.lan --tls-san 192.168.1.100 --node-label=zone=a"
+}
+
+test_install_master_node_is_fully_driven_by_flags_and_environment() {
+  make_installer_stub
+  K3S_TOKEN=s3cret run barekube_cli install master-node --reinstall --yes \
+    --server https://192.168.1.100:6443 --tls-san k8s.home.lan --disable traefik
+  assert_status 0
+  assert_called "sh -s - server --server https://192.168.1.100:6443 --flannel-backend wireguard-native --disable=traefik --tls-san k8s.home.lan"
+  assert_called "env K3S_TOKEN=s3cret K3S_URL="
+  assert_output_line "installed"
+}
+
+test_install_agent_node_is_fully_driven_by_flags_and_environment() {
+  make_installer_stub
+  K3S_TOKEN=s3cret run barekube_cli install agent-node --reinstall --yes --server https://192.168.1.100:6443
+  assert_status 0
+  assert_called "sh -s - agent"
+  assert_called "env K3S_TOKEN=s3cret K3S_URL=https://192.168.1.100:6443"
+  assert_output_line "installed"
+}
+
+test_the_join_token_never_reaches_the_output_or_a_command_line() {
+  K3S_TOKEN=s3cret run barekube_cli install agent-node --reinstall --yes --server https://192.168.1.100:6443
+  refute_output_contains "s3cret"
+  refute_called_matching "s3cret"
+  K3S_TOKEN=s3cret run barekube_cli install master-node --reinstall --yes --server https://192.168.1.100:6443
+  refute_output_contains "s3cret"
+  refute_called_matching "s3cret"
+}
+
+test_install_with_yes_fails_without_a_server_instead_of_prompting() {
+  K3S_TOKEN=s3cret run barekube_cli install agent-node --reinstall --yes
+  assert_status 1
+  assert_output_contains "--server is required with --yes."
+  refute_called_matching '^sh '
+}
+
+test_install_with_yes_fails_without_a_token_instead_of_prompting() {
+  unset K3S_TOKEN
+  run barekube_cli install master-node --reinstall --yes --server https://192.168.1.100:6443
+  assert_status 1
+  assert_output_contains "K3S_TOKEN is required with --yes."
+  refute_called_matching '^sh '
+}
+
+test_install_commands_document_the_non_interactive_options() {
+  run barekube_cli install master-node --help
+  assert_output_contains "--server URL"
+  assert_output_contains "--yes, -y"
+  assert_output_contains "--tls-san SAN (repeatable)"
+  assert_output_contains "--disable COMPONENT (repeatable)"
+  assert_output_contains "--extra-args ARGUMENTS"
+  assert_output_contains "K3S_TOKEN"
+  run barekube_cli install agent-node --help
+  assert_output_contains "K3S_TOKEN"
+}
+
+test_command_output_has_no_bashly_boilerplate() {
+  run barekube_cli k3s start
+  refute_output_contains "It contains the implementation"
+  refute_output_contains "args:"
 }
 
 test_install_exits_early_when_k3s_is_already_installed() {
@@ -243,6 +342,7 @@ test_install_exits_early_when_k3s_is_already_installed() {
   run barekube_cli install initial-master
   assert_status 0
   assert_output_contains "k3s is already installed."
+  assert_output_line "already installed"
   refute_called_matching '^sh '
 }
 
