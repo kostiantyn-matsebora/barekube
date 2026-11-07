@@ -62,6 +62,6 @@ Releases are published by CI from a version tag, never by hand.
    git push origin v0.3.0
    ```
 
-3. The release workflow runs the tests and the five-node cluster test, checks that the tag matches the version, builds the script, and publishes it to GitHub Releases with a checksum, a Sigstore signature and a provenance attestation.
+3. The release workflow runs the tests and the five-node cluster test, checks that the tag matches the version, builds the script, and publishes it to GitHub Releases with a checksum, a Sigstore signature and a provenance attestation, together with `barekube-ansible.tar.gz`, the packed playbooks (`orchestration/package.sh`), which has the same.
 
 The workflow refuses a tag that is not on `master`, that does not match `cli/bashly.yml`, or that differs from `barekube_version` in `orchestration/ansible/roles/barekube/defaults/main.yml`. Change both versions in the release commit.

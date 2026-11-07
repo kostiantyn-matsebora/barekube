@@ -24,17 +24,18 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
 
 ## Quick start: build a cluster
 
-The fast way to get a cluster is Ansible: list your machines in an inventory and run one command. It installs barekube on every machine, then the first master, the other masters and the agents. You do not need to install the barekube CLI on your computer.
-
 ```shell
-git clone https://github.com/kostiantyn-matsebora/barekube.git && cd barekube/orchestration/ansible
-cp inventory.example.yml inventory.yml     # put your machines in it
+curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
+cd barekube-ansible
+cp inventory.example.yml inventory.yml     # your machines
 ./play.sh
 ```
 
-The kubeconfig is saved to `~/.barekube/default/kubeconfig`. Run `./play.sh` again to add machines or change settings. It needs either Ansible or Docker on your computer, and SSH access to the machines. Settings, adding and removing nodes and tearing the cluster down are in [orchestration/ansible](orchestration/ansible/README.md).
-
-To set up a single node by hand instead, use the barekube CLI, described next.
+- **Needs:** Ansible or Docker on your computer, SSH access to the machines
+- **Result:** a cluster, and its kubeconfig in `~/.barekube/default/kubeconfig`
+- **Again:** run `./play.sh` to add machines or change settings
+- **More:** [settings, removing nodes, teardown](orchestration/ansible/README.md)
+- **One node by hand:** [use the CLI](#installing-the-cli)
 
 ## Installing the CLI
 
