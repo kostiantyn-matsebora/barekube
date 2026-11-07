@@ -189,7 +189,11 @@ check_gvisor_default_flag() {
 
 test_initial_master_forwards_the_gvisor_default_flag() { check_gvisor_default_flag barekube_install_initial_master_command; }
 test_master_node_forwards_the_gvisor_default_flag() { check_gvisor_default_flag barekube_install_master_node_command; }
-test_agent_node_forwards_the_gvisor_default_flag() { check_gvisor_default_flag barekube_install_agent_node_command; }
+test_agent_node_sets_up_gvisor_without_a_default() {
+  run barekube_install_agent_node_command
+  assert_called "setup_gvisor "
+  refute_called_matching "setup_gvisor on"
+}
 
 test_install_gvisor() {
   run barekube_install_gvisor_command

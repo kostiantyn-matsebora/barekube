@@ -8,8 +8,9 @@ source "$CLI_DIR/src/gvisor.sh"
 
 CONFIG_DIR=/var/lib/rancher/k3s/agent/etc/containerd
 KEYRING=/usr/share/keyrings/gvisor-archive-keyring.gpg
-DEFAULT_V2=$CONFIG_DIR/config.toml.d/barekube-gvisor-default.toml
-DEFAULT_V3=$CONFIG_DIR/config-v3.toml.d/barekube-gvisor-default.toml
+MANIFESTS=/var/lib/rancher/k3s/server/manifests
+CLASSES=$MANIFESTS/barekube-gvisor.yaml
+POLICY=$MANIFESTS/barekube-gvisor-default.yaml
 
 setup() {
   mock sudo curl dpkg
@@ -218,109 +219,133 @@ test_register_gvisor_reports_a_template_directory_it_cannot_create() {
   refute_called_matching '^sudo tee'
 }
 
-# ------------------------------------------------------------ default runtime
+# ----------------------------------------------------- cluster-level objects
 
-test_runsc_default_config_names_runsc_in_both_config_versions() {
-  run runsc_default_config_v2
-  assert_output_contains '[plugins."io.containerd.grpc.v1.cri".containerd]'
-  assert_output_contains 'default_runtime_name = "runsc"'
-  run runsc_default_config_v3
-  assert_output_contains "[plugins.'io.containerd.cri.v1.runtime'.containerd]"
-  assert_output_contains "default_runtime_name = 'runsc'"
+test_runtime_classes_manifest_defines_gvisor_and_runc() {
+  run gvisor_runtime_classes_manifest
+  assert_output_contains "name: gvisor"
+  assert_output_contains "handler: runsc"
+  assert_output_contains "name: runc"
+  assert_output_contains "handler: runc"
 }
 
-test_set_gvisor_default_on_writes_both_drop_ins() {
+test_default_policy_sets_the_gvisor_runtime_class() {
+  run gvisor_default_policy_manifest
+  assert_output_contains "kind: MutatingAdmissionPolicy"
+  assert_output_contains "kind: MutatingAdmissionPolicyBinding"
+  assert_output_contains '"/spec/runtimeClassName", value: "gvisor"'
+}
+
+test_default_policy_leaves_alone_pods_that_name_a_class_or_need_the_host() {
+  run gvisor_default_policy_manifest
+  assert_output_contains "!has(object.spec.runtimeClassName)"
+  assert_output_contains "hostNetwork"
+  assert_output_contains "privileged"
+}
+
+test_default_policy_skips_the_system_namespaces() {
+  run gvisor_default_policy_manifest
+  assert_output_contains "kube-system"
+  assert_output_contains "longhorn-system"
+}
+
+test_write_k3s_manifest_writes_a_new_file() {
   mock_fail sudo 'cmp*'
-  run set_gvisor_default on
+  run write_k3s_manifest "$CLASSES" gvisor_runtime_classes_manifest
   assert_status 0
-  assert_called "sudo mkdir -p $CONFIG_DIR/config.toml.d"
-  assert_called "sudo mkdir -p $CONFIG_DIR/config-v3.toml.d"
-  assert_called "sudo tee $DEFAULT_V2"
-  assert_called "sudo tee $DEFAULT_V3"
-  assert_file_contains "$STDIN_LOG" 'default_runtime_name = "runsc"'
-  assert_file_contains "$STDIN_LOG" "default_runtime_name = 'runsc'"
+  assert_called "sudo mkdir -p $MANIFESTS"
+  assert_called "sudo tee $CLASSES"
+  assert_file_contains "$STDIN_LOG" "handler: runsc"
 }
 
-test_set_gvisor_default_on_does_nothing_when_already_on() {
-  run set_gvisor_default on
+test_write_k3s_manifest_leaves_an_identical_file_alone() {
+  run write_k3s_manifest "$CLASSES" gvisor_runtime_classes_manifest
   assert_status 1
   refute_called_matching '^sudo tee'
 }
 
-test_set_gvisor_default_on_rewrites_a_drop_in_with_other_content() {
-  sudo() { echo "sudo $*" >>"$CALLS"; [[ "$1" == cmp && "$*" == *config-v3* ]] && return 1; return 0; }
-  run set_gvisor_default on
-  assert_status 0
-  assert_called "sudo tee $DEFAULT_V3"
-  refute_called "sudo tee $DEFAULT_V2"
+test_write_k3s_manifest_reports_a_failed_write() {
+  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in cmp | tee) return 1 ;; esac; return 0; }
+  run write_k3s_manifest "$CLASSES" gvisor_runtime_classes_manifest
+  assert_output_contains "Failed to write $CLASSES"
 }
 
-test_set_gvisor_default_off_removes_both_drop_ins() {
-  run set_gvisor_default off
-  assert_status 0
-  assert_called "sudo rm -f $DEFAULT_V2"
-  assert_called "sudo rm -f $DEFAULT_V3"
+test_write_k3s_manifest_reports_a_failed_directory() {
+  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in cmp | mkdir) return 1 ;; esac; return 0; }
+  run write_k3s_manifest "$CLASSES" gvisor_runtime_classes_manifest
+  assert_output_contains "Failed to create $MANIFESTS"
 }
 
-test_set_gvisor_default_off_does_nothing_when_already_off() {
+test_remove_k3s_manifest_removes_an_existing_file() {
+  run remove_k3s_manifest "$POLICY"
+  assert_status 0
+  assert_called "sudo rm -f $POLICY"
+}
+
+test_remove_k3s_manifest_does_nothing_without_the_file() {
   mock_fail sudo 'test*'
-  run set_gvisor_default off
+  run remove_k3s_manifest "$POLICY"
   assert_status 1
   refute_called_matching '^sudo rm'
 }
 
-test_set_gvisor_default_reports_a_failed_write() {
-  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in cmp | tee) return 1 ;; esac; return 0; }
-  run set_gvisor_default on
-  assert_output_contains "Failed to write $DEFAULT_V2"
-}
-
-test_set_gvisor_default_reports_a_failed_directory() {
-  sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in cmp | mkdir) return 1 ;; esac; return 0; }
-  run set_gvisor_default on
-  assert_output_contains "Failed to create $CONFIG_DIR/config.toml.d"
-}
-
-test_set_gvisor_default_reports_a_failed_removal() {
+test_remove_k3s_manifest_reports_a_failed_removal() {
   sudo() { echo "sudo $*" >>"$CALLS"; case "$1" in rm) return 1 ;; esac; return 0; }
-  run set_gvisor_default off
-  assert_output_contains "Failed to remove $DEFAULT_V2"
+  run remove_k3s_manifest "$POLICY"
+  assert_output_contains "Failed to remove $POLICY"
 }
 
-test_register_gvisor_with_on_makes_it_the_default_and_restarts_once() {
-  sudo() { echo "sudo $*" >>"$CALLS"; [[ "$1" == cmp ]] && return 1; return 0; }
-  run register_gvisor_to_k3s on
+test_publish_on_a_server_adds_the_runtime_classes_only() {
+  mock_fail sudo 'cmp*'
+  run publish_gvisor_to_cluster ""
   assert_status 0
-  assert_called "sudo tee $DEFAULT_V2"
-  assert_called "sudo tee $DEFAULT_V3"
-  assert_eq 1 "$(grep -c 'systemctl restart' "$CALLS")" "k3s restarts"
+  assert_called "sudo tee $CLASSES"
+  refute_called "sudo tee $POLICY"
 }
 
-test_register_gvisor_restarts_k3s_when_only_the_default_changed() {
-  # The templates already hold runsc; only the default switches on.
-  sudo() { echo "sudo $*" >>"$CALLS"; [[ "$1" == cmp ]] && return 1; return 0; }
-  run register_gvisor_to_k3s on
-  refute_called_matching '^sudo tee -a'
-  assert_called "sudo systemctl restart k3s"
+test_publish_with_on_adds_the_default_policy() {
+  mock_fail sudo 'cmp*'
+  run publish_gvisor_to_cluster on
+  assert_called "sudo tee $CLASSES"
+  assert_called "sudo tee $POLICY"
 }
 
-test_register_gvisor_with_off_removes_the_default() {
-  run register_gvisor_to_k3s off
+test_publish_with_off_removes_the_default_policy() {
+  run publish_gvisor_to_cluster off
+  assert_called "sudo rm -f $POLICY"
+}
+
+test_publish_does_not_restart_k3s() {
+  mock_fail sudo 'cmp*'
+  run publish_gvisor_to_cluster on
+  refute_called_matching 'systemctl'
+}
+
+test_publish_on_an_agent_does_nothing_without_a_mode() {
+  K3S_SYSTEMD_DIR="$TEST_TMP/systemd"; mkdir -p "$K3S_SYSTEMD_DIR"; touch "$K3S_SYSTEMD_DIR/k3s-agent.service"
+  run publish_gvisor_to_cluster ""
   assert_status 0
-  assert_called "sudo rm -f $DEFAULT_V2"
-  assert_called "sudo systemctl restart k3s"
+  refute_called_matching '^sudo'
 }
 
-test_register_gvisor_without_a_mode_leaves_the_default_alone() {
-  run register_gvisor_to_k3s ""
-  refute_called_matching "default"
-  refute_called_matching '^sudo rm'
+test_publish_on_an_agent_refuses_a_default() {
+  K3S_SYSTEMD_DIR="$TEST_TMP/systemd"; mkdir -p "$K3S_SYSTEMD_DIR"; touch "$K3S_SYSTEMD_DIR/k3s-agent.service"
+  run publish_gvisor_to_cluster on
+  assert_status 1
+  assert_output_contains "run this on a control-plane node"
+  refute_called_matching '^sudo'
 }
 
-test_setup_gvisor_passes_the_mode_on() {
-  sudo() { echo "sudo $*" >>"$CALLS"; [[ "$1" == cmp ]] && return 1; return 0; }
+test_setup_gvisor_publishes_with_the_mode() {
+  mock_fail sudo 'cmp*'
   run setup_gvisor on
-  assert_called "sudo tee $DEFAULT_V3"
+  assert_called "sudo tee $POLICY"
+}
+
+test_setup_gvisor_stops_when_an_agent_is_asked_for_the_default() {
+  K3S_SYSTEMD_DIR="$TEST_TMP/systemd"; mkdir -p "$K3S_SYSTEMD_DIR"; touch "$K3S_SYSTEMD_DIR/k3s-agent.service"
+  run setup_gvisor on
+  assert_status 1
 }
 
 test_setup_gvisor_installs_then_registers() {

@@ -38,10 +38,10 @@ install_ok() {
 
 join_agent() {
   install_ok "$1" lxc exec "$1" --env K3S_TOKEN="$TOKEN" -- \
-    barekube install agent-node --yes --server "https://$FIRST_IP:6443" "${GVISOR_FLAGS[@]}"
+    barekube install agent-node --yes --server "https://$FIRST_IP:6443"
 }
 
-log "gVisor is the default runtime: $GVISOR_DEFAULT"
+log "gVisor is the default for pods: $GVISOR_DEFAULT"
 group "Create the five nodes"
 parallel_nodes launch_node "${NODES[@]}"
 endgroup

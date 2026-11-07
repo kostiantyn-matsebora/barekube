@@ -5,14 +5,12 @@ GVISOR_KEYRING="/usr/share/keyrings/gvisor-archive-keyring.gpg"
 GVISOR_REPO_URL="https://storage.googleapis.com/gvisor/releases"
 GVISOR_APT_SOURCE="/etc/apt/sources.list.d/gvisor.list"
 K3S_CONTAINERD_DIR="/var/lib/rancher/k3s/agent/etc/containerd"
-# The k3s containerd templates import every *.toml file of these directories.
-# The files below belong to barekube, so the default can be switched on and off
-# cleanly. (k3s's own --default-runtime flag only accepts runtimes it detects by
-# itself, and runsc is not one of them.)
-GVISOR_DEFAULT_DROPINS=(
-    "config.toml.d/barekube-gvisor-default.toml:runsc_default_config_v2"
-    "config-v3.toml.d/barekube-gvisor-default.toml:runsc_default_config_v3"
-)
+# k3s applies every manifest in this directory on the server nodes, and removes
+# what a manifest created when the file is deleted. The files below belong to
+# barekube.
+K3S_MANIFESTS_DIR="/var/lib/rancher/k3s/server/manifests"
+GVISOR_RUNTIMECLASSES_MANIFEST="$K3S_MANIFESTS_DIR/barekube-gvisor.yaml"
+GVISOR_DEFAULT_MANIFEST="$K3S_MANIFESTS_DIR/barekube-gvisor-default.yaml"
 
 install_gvisor_prerequisites() {
     run_privileged "Installing gVisor dependencies..." "Failed to install gVisor dependencies" \
@@ -82,64 +80,101 @@ add_runsc_to_template() {
     return 0
 }
 
-runsc_default_config_v2() {
+# The RuntimeClasses pods use to pick a runtime: gvisor for the sandbox, runc
+# to stay out of it.
+gvisor_runtime_classes_manifest() {
     cat <<'EOF'
-[plugins."io.containerd.grpc.v1.cri".containerd]
-  default_runtime_name = "runsc"
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+handler: runsc
+---
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: runc
+handler: runc
 EOF
 }
 
-runsc_default_config_v3() {
+# Sets runtimeClassName: gvisor on every new pod that names no RuntimeClass.
+# Pods that need the host (host namespaces, privileged containers) and the
+# system namespaces are left alone: gVisor cannot run them.
+gvisor_default_policy_manifest() {
     cat <<'EOF'
-[plugins.'io.containerd.cri.v1.runtime'.containerd]
-  default_runtime_name = 'runsc'
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: barekube-gvisor-default
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+  matchConditions:
+    - name: names-no-runtime-class
+      expression: "!has(object.spec.runtimeClassName)"
+    - name: does-not-use-host-namespaces
+      expression: >-
+        !(has(object.spec.hostNetwork) && object.spec.hostNetwork) &&
+        !(has(object.spec.hostPID) && object.spec.hostPID) &&
+        !(has(object.spec.hostIPC) && object.spec.hostIPC)
+    - name: runs-no-privileged-container
+      expression: >-
+        !(object.spec.containers + (has(object.spec.initContainers) ? object.spec.initContainers : []))
+        .exists(c, has(c.securityContext) && has(c.securityContext.privileged) && c.securityContext.privileged)
+  mutations:
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: >-
+          [JSONPatch{op: "add", path: "/spec/runtimeClassName", value: "gvisor"}]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: barekube-gvisor-default
+spec:
+  policyName: barekube-gvisor-default
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public, kube-node-lease, longhorn-system]
 EOF
 }
 
-# Makes runsc the runtime of every pod that does not name a RuntimeClass on this
-# node ("on"), or stops doing so ("off"). Returns 0 when it changed something,
-# 1 when the node was already as asked.
-# Usage: set_gvisor_default on|off
-set_gvisor_default() {
-    local ENTRY FILE STANZA CHANGED=1
-    for ENTRY in "${GVISOR_DEFAULT_DROPINS[@]}"
-    do
-        FILE="$K3S_CONTAINERD_DIR/${ENTRY%%:*}"
-        STANZA="${ENTRY##*:}"
-        if [[ "$1" == "on" ]]
-        then
-            add_default_runtime_dropin "$FILE" "$STANZA" && CHANGED=0
-        else
-            remove_default_runtime_dropin "$FILE" && CHANGED=0
-        fi
-    done
-    return "$CHANGED"
-}
-
-# Usage: add_default_runtime_dropin FILE STANZA_FUNCTION  (0 = wrote it, 1 = already there)
-add_default_runtime_dropin() {
-    local FILE="$1" STANZA="$2"
-    "$STANZA" | sudo cmp -s - "$FILE" && return 1
-    run_privileged "Preparing $(dirname "$FILE")..." "Failed to create $(dirname "$FILE")" \
-        mkdir -p "$(dirname "$FILE")"
-    echo_info "Making gVisor the default runtime in $FILE..."
-    "$STANZA" | sudo tee "$FILE" > /dev/null
+# Writes a manifest for k3s to apply.
+# Returns 0 when it wrote the file, 1 when the file was already as it should be.
+# Usage: write_k3s_manifest FILE CONTENT_FUNCTION
+write_k3s_manifest() {
+    local FILE="$1" CONTENT="$2"
+    "$CONTENT" | sudo cmp -s - "$FILE" && return 1
+    run_privileged "Preparing $K3S_MANIFESTS_DIR..." "Failed to create $K3S_MANIFESTS_DIR" \
+        mkdir -p "$K3S_MANIFESTS_DIR"
+    echo_info "Writing $FILE..."
+    "$CONTENT" | sudo tee "$FILE" > /dev/null
     exit_if_error "Failed to write $FILE"
     return 0
 }
 
-# Usage: remove_default_runtime_dropin FILE  (0 = removed it, 1 = was not there)
-remove_default_runtime_dropin() {
+# Returns 0 when it removed the manifest, 1 when there was none.
+# Usage: remove_k3s_manifest FILE
+remove_k3s_manifest() {
     sudo test -f "$1" || return 1
-    echo_info "Removing gVisor as the default runtime from $1..."
+    echo_info "Removing $1..."
     sudo rm -f "$1"
     exit_if_error "Failed to remove $1"
     return 0
 }
 
-# Registers the runsc runtime with k3s and, when asked, switches the default
-# runtime; k3s is restarted once if anything changed.
-# Usage: register_gvisor_to_k3s [on|off]   (empty leaves the default as it is)
+# Registers the runsc runtime with containerd on this node; k3s restarts once
+# if anything changed.
 register_gvisor_to_k3s() {
     local SERVICE CHANGED=1
     SERVICE="$(k3s_service_name)"
@@ -149,10 +184,6 @@ register_gvisor_to_k3s() {
 
     add_runsc_to_template "$K3S_CONTAINERD_DIR/config.toml.tmpl" runsc_runtime_config_v2 && CHANGED=0
     add_runsc_to_template "$K3S_CONTAINERD_DIR/config-v3.toml.tmpl" runsc_runtime_config_v3 && CHANGED=0
-    if [[ -n "$1" ]]
-    then
-        set_gvisor_default "$1" && CHANGED=0
-    fi
     if [[ "$CHANGED" -ne 0 ]]
     then
         echo_message "The runsc runtime is already registered."
@@ -162,9 +193,32 @@ register_gvisor_to_k3s() {
     run_privileged "Restarting $SERVICE..." "Failed to register gVisor to k3s" systemctl restart "$SERVICE"
 }
 
-# Installs gVisor and wires it into k3s - the pair every node install needs.
+# Makes the gvisor and runc RuntimeClasses available in the cluster and, when
+# asked, makes gVisor the default for pods that name no RuntimeClass. These are
+# cluster objects, applied by a server node; agents have nothing to do here.
+# Usage: publish_gvisor_to_cluster [on|off]   (empty leaves the default as it is)
+publish_gvisor_to_cluster() {
+    if [[ "$(k3s_service_name)" != "k3s" ]]
+    then
+        if [[ -n "$1" ]]
+        then
+            echo_error "The gVisor default is a cluster setting: run this on a control-plane node, not an agent."
+            return 1
+        fi
+        return 0
+    fi
+    write_k3s_manifest "$GVISOR_RUNTIMECLASSES_MANIFEST" gvisor_runtime_classes_manifest
+    case "$1" in
+        on) write_k3s_manifest "$GVISOR_DEFAULT_MANIFEST" gvisor_default_policy_manifest ;;
+        off) remove_k3s_manifest "$GVISOR_DEFAULT_MANIFEST" ;;
+    esac
+    return 0
+}
+
+# Installs gVisor and wires it into k3s and the cluster - what every node install needs.
 # Usage: setup_gvisor [on|off]
 setup_gvisor() {
     install_gvisor
-    register_gvisor_to_k3s "$1"
+    register_gvisor_to_k3s
+    publish_gvisor_to_cluster "$1" || exit 1
 }

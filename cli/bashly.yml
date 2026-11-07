@@ -25,7 +25,7 @@ commands:
         - long: --reinstall
           help: Reinstall k3s
         - long: --gvisor-default
-          help: Make gVisor the default runtime of pods on this node
+          help: Make gVisor the default for pods that name no RuntimeClass (cluster-wide)
         - long: --yes
           short: -y
           help: Do not prompt; fail when a required value is missing
@@ -47,7 +47,7 @@ commands:
         - long: --reinstall
           help: Reinstall k3s
         - long: --gvisor-default
-          help: Make gVisor the default runtime of pods on this node
+          help: Make gVisor the default for pods that name no RuntimeClass (cluster-wide)
         - long: --server
           arg: url
           help: URL of the cluster to join, for example https://192.168.1.1:6443
@@ -74,8 +74,6 @@ commands:
       flags:
         - long: --reinstall
           help: Reinstall k3s
-        - long: --gvisor-default
-          help: Make gVisor the default runtime of pods on this node
         - long: --server
           arg: url
           help: URL of the cluster to join, for example https://192.168.1.1:6443
@@ -89,10 +87,10 @@ commands:
       help: Install and configure gVisor for existing k3s node
       flags:
         - long: --default
-          help: Make gVisor the default runtime of pods on this node
+          help: Make gVisor the default for pods that name no RuntimeClass (cluster-wide)
           conflicts: [--no-default]
         - long: --no-default
-          help: Stop making gVisor the default runtime of pods on this node
+          help: Stop making gVisor the default for pods that name no RuntimeClass
           conflicts: [--default]
 
     - name: longhorn-dependencies
