@@ -44,7 +44,9 @@ To install barekube CLI you simply must do the following steps:
 
 ## Non-interactive usage
 
-Every value the install commands ask for can be given up front, so barekube can be driven by scripts and orchestration tools. `--yes` turns every prompt into an error instead of waiting for input. The join token is read from the `K3S_TOKEN` environment variable; there is deliberately no `--token` flag, because it would show up in `ps` and shell history.
+By default the install commands ask you questions. To run them from a script, pass the answers as flags and add `--yes`. Barekube then stops with an error if something is missing, instead of waiting for you to type it.
+
+The join token is not a flag. Put it in the `K3S_TOKEN` environment variable, so it stays out of `ps` output and your shell history.
 
 ```shell
 # First master
@@ -56,7 +58,7 @@ barekube install master-node --yes --server https://192.168.1.10:6443
 barekube install agent-node  --yes --server https://192.168.1.10:6443
 ```
 
-The install commands print a plain `installed` or `already installed` line, so callers can tell whether anything changed.
+When an install command finishes it prints `installed` or `already installed`, so a script can tell whether anything changed.
 
 ## Usage
 
