@@ -36,10 +36,10 @@ blocks_between() {
   ' "$README"
 }
 
-INSTALL_STEPS="$(blocks_between '## Installation' '### Verifying the download')"
+INSTALL_STEPS="$(blocks_between '## Installing the CLI' '### Verifying the download')"
 VERIFY_STEPS="$(blocks_between '### Verifying the download' '## Usage')"
 VERIFY_ALTERNATIVE="$(blocks_between '### Verifying the download' '## Usage' details)"
-[[ -n "$INSTALL_STEPS" ]] || fail "no Bash blocks found in the README Installation section"
+[[ -n "$INSTALL_STEPS" ]] || fail "no Bash blocks found in the README "Installing the CLI" section"
 
 case "$MODE" in
   local)
