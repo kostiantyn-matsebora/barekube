@@ -25,21 +25,22 @@ GVISOR_FLAGS=()
 # service load balancer or ingress; those belong to the layer above barekube.
 K3S_FLAGS=(--disable servicelb --disable traefik)
 
-# run_playbook [PLAYBOOK [ARGS...]]: runs a playbook of orchestration/ansible
-# (site.yml by default) against the test nodes, with the CLI of this checkout.
+# The playbooks as a user gets them: the release archive, extracted. The CLI of
+# this checkout sits next to them and is installed from there.
+PLAYBOOK_DIR="$STATE_DIR/barekube-ansible"
+
+# run_playbook [PLAYBOOK [ARGS...]]: runs a playbook (site.yml by default)
+# through play.sh in Docker, against the test nodes over SSH, exactly as the
+# README describes. The cluster is added to the runner's ~/.kube/config.
 run_playbook() {
   local playbook="${1:-site.yml}"
   shift || true
-  (
-    cd "$ROOT/orchestration/ansible"
-    ansible-playbook -i "$STATE_DIR/inventory.yml" "$playbook" "$@" \
-      -e "barekube_cli_path=$ROOT/cli/release/barekube" \
-      -e barekube_verify_signature=false \
-      -e barekube_show_output=true \
-      -e "barekube_gvisor_default=$GVISOR_DEFAULT" \
-      -e '{"barekube_disable": ["servicelb", "traefik"]}' \
-      -e "barekube_kubeconfig=$STATE_DIR/kubeconfig"
-  )
+  BAREKUBE_USE_DOCKER=1 "$PLAYBOOK_DIR/play.sh" "$playbook" "$@" \
+    -e barekube_cli_path=/ansible/barekube \
+    -e barekube_verify_signature=false \
+    -e barekube_show_output=true \
+    -e "barekube_gvisor_default=$GVISOR_DEFAULT" \
+    -e '{"barekube_disable": ["servicelb", "traefik"]}'
 }
 
 log() { printf '[%s] %s\n' "$(date +%T)" "$*"; }

@@ -344,13 +344,12 @@ check_playbook_rerun_changes_nothing() {
     || { log "the playbook changed something on a second run"; return 1; }
 }
 
-# The playbook adds the cluster to the kubeconfig kubectl reads, as the current
-# context, so kubectl works from the machine that ran it with no extra options.
+# The playbook adds the cluster to ~/.kube/config as the current context, so
+# kubectl works from the machine that ran it with no extra options.
 check_kubectl_works_with_the_saved_kubeconfig() {
-  local config="$STATE_DIR/kubeconfig"
-  [[ -s "$config" ]] || { log "the playbook saved no kubeconfig"; return 1; }
-  expect_eq "$(KUBECONFIG="$config" kubectl config current-context)" barekube-default "current context" || return 1
-  expect_eq "$(KUBECONFIG="$config" kubectl get nodes --no-headers | wc -l)" 5 "nodes seen by kubectl" || return 1
+  [[ -s ~/.kube/config ]] || { log "the playbook saved no kubeconfig"; return 1; }
+  expect_eq "$(kubectl config current-context)" barekube-default "current context" || return 1
+  expect_eq "$(kubectl get nodes --no-headers | wc -l)" 5 "nodes seen by kubectl" || return 1
 }
 
 check_idempotent_install() {
@@ -433,7 +432,7 @@ check_playbook_uninstall_needs_confirmation_and_then_removes_k3s() {
   for n in "${NODES[@]}"; do
     ! node "$n" test -e /usr/local/bin/k3s || { log "k3s is still installed on $n"; return 1; }
   done
-  ! KUBECONFIG="$STATE_DIR/kubeconfig" kubectl config get-contexts -o name | grep -qx barekube-default \
+  ! kubectl config get-contexts -o name | grep -qx barekube-default \
     || { log "the cluster is still in the kubeconfig"; return 1; }
 }
 

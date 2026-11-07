@@ -46,7 +46,7 @@ Pull requests are squash-merged and the branch is deleted after the merge.
 
 ## The cluster test
 
-The `E2E cluster` workflow builds a real cluster of three masters and two agents (LXD containers on one GitHub runner) with the barekube script of the commit, then checks it end to end. It builds it three times: with the barekube commands run node by node, and with the Ansible playbook with and without gVisor as the default. The checks cover the control plane, the WireGuard mesh, pod and service networking, gVisor, the Longhorn prerequisites, failover and the day-two commands. It runs every day, on demand from the Actions tab, and before every release; a release is not published unless it passes. It is not part of the pull request checks because it takes about ten minutes.
+The `E2E cluster` workflow builds a real cluster of three masters and two agents (LXD containers on one GitHub runner) with the barekube script of the commit, then checks it end to end. It builds it four times: with the barekube commands run node by node, and with the Ansible playbook (the release archive, run through `play.sh` in Docker over SSH), each with and without gVisor as the default. The checks cover the control plane, the WireGuard mesh, pod and service networking, gVisor, the Longhorn prerequisites, failover and the day-two commands. It runs every day, on demand from the Actions tab, and before every release; a release is not published unless it passes. It is not part of the pull request checks because it takes about ten minutes.
 
 The scripts are in `cli/tests/e2e/`.
 
