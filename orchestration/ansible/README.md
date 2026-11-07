@@ -35,18 +35,21 @@ all:
   children:
     masters:                  # the first one is the initial master
       hosts:
-        master-1: { ansible_host: 192.168.1.10 }
-        master-2: { ansible_host: 192.168.1.15 }
-        master-3: { ansible_host: 192.168.1.5 }
+        192.168.1.10:
+        192.168.1.15:
+        192.168.1.5:
     agents:
       hosts:
-        agent-1: { ansible_host: 192.168.1.50 }
+        192.168.1.50:
   vars:
     ansible_user: ubuntu
     ansible_become: true
 ```
 
-Full template: [inventory.example.yml](inventory.example.yml). Keep an odd number of masters.
+- Hosts are IP addresses or names. For a name that does not resolve, add `ansible_host: <IP>`
+- `-e barekube_node=` takes the name as written in the inventory
+- Keep an odd number of masters
+- Full template: [inventory.example.yml](inventory.example.yml)
 
 ## Settings
 
