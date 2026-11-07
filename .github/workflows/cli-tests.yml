@@ -20,7 +20,7 @@ jobs:
     name: Unit and end-to-end tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Exits non-zero when any test fails, failing the job (and the PR check).
       - name: Run tests with coverage
@@ -31,7 +31,7 @@ jobs:
     name: Generated release is up to date
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Same pinned version that generated the committed release/barekube.
       - name: Regenerate release/barekube
