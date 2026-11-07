@@ -25,22 +25,39 @@ GVISOR_FLAGS=()
 # service load balancer or ingress; those belong to the layer above barekube.
 K3S_FLAGS=(--disable servicelb --disable traefik)
 
-# The playbooks as a user gets them: the release archive, extracted. The CLI of
-# this checkout sits next to them and is installed from there.
+# Whether the cluster is built with the Ansible playbooks, in either of the two
+# ways a user gets them: "ansible" is the release archive run with play.sh in
+# Docker, "galaxy" is the Ansible collection run with ansible-playbook.
+uses_playbooks() { [[ "$PROVISIONER" == "ansible" || "$PROVISIONER" == "galaxy" ]]; }
+
+# Laid out as in the README: inventory.yml in the current directory (STATE_DIR),
+# the extracted archive or the installed collections next to it. The CLI of this
+# checkout is installed from a local file.
 PLAYBOOK_DIR="$STATE_DIR/barekube-ansible"
 
 # run_playbook [PLAYBOOK [ARGS...]]: runs a playbook (site.yml by default)
-# through play.sh in Docker, against the test nodes over SSH, exactly as the
-# README describes. The cluster is added to the runner's ~/.kube/config.
+# against the test nodes over SSH, exactly as the README describes. The cluster
+# is added to the runner's ~/.kube/config.
 run_playbook() {
   local playbook="${1:-site.yml}"
   shift || true
-  BAREKUBE_USE_DOCKER=1 "$PLAYBOOK_DIR/play.sh" "$playbook" "$@" \
-    -e barekube_cli_path=/ansible/barekube \
-    -e barekube_verify_signature=false \
-    -e barekube_show_output=true \
-    -e "barekube_gvisor_default=$GVISOR_DEFAULT" \
+  local settings=(
+    -e barekube_verify_signature=false
+    -e barekube_show_output=true
+    -e "barekube_gvisor_default=$GVISOR_DEFAULT"
     -e '{"barekube_disable": ["servicelb", "traefik"]}'
+  )
+  (
+    cd "$STATE_DIR"
+    if [[ "$PROVISIONER" == "galaxy" ]]; then
+      ANSIBLE_COLLECTIONS_PATH="$STATE_DIR/collections" ansible-playbook -i inventory.yml \
+        "kostiantyn_matsebora.barekube.${playbook%.yml}" "$@" "${settings[@]}" \
+        -e "barekube_cli_path=$ROOT/cli/release/barekube"
+    else
+      BAREKUBE_USE_DOCKER=1 "$PLAYBOOK_DIR/play.sh" "$playbook" "$@" "${settings[@]}" \
+        -e barekube_cli_path=/ansible/barekube
+    fi
+  )
 }
 
 log() { printf '[%s] %s\n' "$(date +%T)" "$*"; }
