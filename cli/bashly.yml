@@ -1,7 +1,7 @@
 name: barekube
 extensible: true
 help: CLI that provides functionality for installing and configuring bare kubernetes based on k3s and gVisor.
-version: 0.2.0
+version: 0.3.0
 
 x_markdown_footer: |-
       # ISSUE TRACKER
@@ -24,18 +24,61 @@ commands:
       flags:
         - long: --reinstall
           help: Reinstall k3s
+        - long: --yes
+          short: -y
+          help: Do not prompt; fail when a required value is missing
+        - long: --tls-san
+          arg: san
+          repeatable: true
+          help: Add a TLS SAN to the API server certificate (repeatable)
+        - long: --disable
+          arg: component
+          repeatable: true
+          help: Disable a packaged k3s component, for example traefik (repeatable)
+        - long: --extra-args
+          arg: arguments
+          help: Additional k3s server arguments, passed as is
 
     - name: master-node
       help: Install and configure another k3s master node
       flags:
         - long: --reinstall
           help: Reinstall k3s
+        - long: --server
+          arg: url
+          help: URL of the cluster to join, for example https://192.168.1.1:6443
+        - long: --yes
+          short: -y
+          help: Do not prompt; fail when a required value is missing
+        - long: --tls-san
+          arg: san
+          repeatable: true
+          help: Add a TLS SAN to the API server certificate (repeatable)
+        - long: --disable
+          arg: component
+          repeatable: true
+          help: Disable a packaged k3s component, for example traefik (repeatable)
+        - long: --extra-args
+          arg: arguments
+          help: Additional k3s server arguments, passed as is
+      environment_variables:
+        - name: K3S_TOKEN
+          help: Cluster join token (prompted for when unset)
 
     - name: agent-node
       help: Install and configure k3s agent node
       flags:
         - long: --reinstall
           help: Reinstall k3s
+        - long: --server
+          arg: url
+          help: URL of the cluster to join, for example https://192.168.1.1:6443
+        - long: --yes
+          short: -y
+          help: Do not prompt; fail when a required value is missing
+      environment_variables:
+        - name: K3S_TOKEN
+          help: Cluster join token (prompted for when unset)
     - name: gvisor
       help: Install and configure gVisor for existing k3s node
 
@@ -51,6 +94,10 @@ commands:
       help: Stop k3s master node
     - name: uninstall
       help: Uninstall k3s and all related containers
+      flags:
+        - long: --yes
+          short: -y
+          help: Do not ask for confirmation
     - name: killall
       help: Kill k3s and all k3s related containers
     - name: start-agent

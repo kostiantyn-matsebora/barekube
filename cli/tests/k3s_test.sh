@@ -23,6 +23,7 @@ test_check_k3s_installed_exits_when_installed_without_reinstall() {
   run check_k3s_wrapper ""
   assert_status 0
   assert_output_contains "k3s is already installed."
+  assert_output_line "already installed"
   refute_output_contains "continued"
 }
 
@@ -84,25 +85,102 @@ test_gather_additional_args_yields_nothing_when_every_option_is_declined() {
   assert_eq "" "$output"
 }
 
-test_gather_master_params_builds_server_and_token_flags() {
-  script_fn read_input https://10.0.0.1:6443 s3cret
-  run gather_master_params
+test_gather_additional_args_uses_flag_values_without_prompting() {
+  TLS_SANS=(a.example 10.0.0.1)
+  DISABLE_COMPONENTS=(servicelb traefik)
+  script_fn question
+  run gather_additional_args "" "--node-label=x=y"
   assert_status 0
-  assert_eq " --server=https://10.0.0.1:6443 --token=s3cret" "$output"
+  assert_eq " --disable=servicelb --disable=traefik --tls-san a.example --tls-san 10.0.0.1 --node-label=x=y" "$output"
+  assert_no_calls
 }
 
-test_gather_master_params_requires_a_master_url() {
+test_gather_additional_args_accepts_only_extra_arguments() {
+  run gather_additional_args "" "--node-label=x=y"
+  assert_eq " --node-label=x=y" "$output"
+}
+
+test_gather_additional_args_accepts_only_a_tls_san_flag() {
+  TLS_SANS=(k8s.home.lan)
+  run gather_additional_args ""
+  assert_eq " --tls-san k8s.home.lan" "$output"
+}
+
+test_gather_additional_args_with_yes_and_no_flags_adds_nothing_and_never_asks() {
+  script_fn question
+  run gather_additional_args --yes
+  assert_status 0
+  assert_eq "" "$output"
+  assert_no_calls
+}
+
+test_gather_additional_args_flags_win_over_yes() {
+  DISABLE_COMPONENTS=(traefik)
+  run gather_additional_args --yes
+  assert_eq " --disable=traefik" "$output"
+}
+
+test_resolve_server_url_prefers_the_flag_value() {
+  script_fn read_input
+  run resolve_server_url "https://10.0.0.1:6443" ""
+  assert_status 0
+  assert_eq "https://10.0.0.1:6443" "$output"
+  assert_no_calls
+}
+
+test_resolve_server_url_prompts_when_the_flag_is_absent() {
+  script_fn read_input https://10.0.0.2:6443
+  run resolve_server_url "" ""
+  assert_status 0
+  assert_eq "https://10.0.0.2:6443" "$output"
+}
+
+test_resolve_server_url_requires_a_value() {
   script_fn read_input ""
-  run gather_master_params
+  run resolve_server_url "" ""
   assert_status 1
   assert_output_contains "Master URL is required."
 }
 
-test_gather_master_params_requires_a_token() {
-  script_fn read_input https://10.0.0.1:6443 ""
-  run gather_master_params
+test_resolve_server_url_fails_instead_of_prompting_with_yes() {
+  script_fn read_input
+  run resolve_server_url "" --yes
+  assert_status 1
+  assert_output_contains "--server is required with --yes."
+  assert_no_calls
+}
+
+test_resolve_token_reads_the_environment_variable() {
+  script_fn read_input
+  K3S_TOKEN=s3cret run resolve_token ""
+  assert_status 0
+  assert_eq "s3cret" "$output"
+  assert_no_calls
+}
+
+test_resolve_token_prompts_when_the_variable_is_unset() {
+  unset K3S_TOKEN
+  script_fn read_input s3cret
+  run resolve_token ""
+  assert_status 0
+  assert_eq "s3cret" "$output"
+}
+
+test_resolve_token_requires_a_value() {
+  unset K3S_TOKEN
+  script_fn read_input ""
+  run resolve_token ""
   assert_status 1
   assert_output_contains "Token is required."
+}
+
+test_resolve_token_fails_instead_of_prompting_with_yes() {
+  unset K3S_TOKEN
+  script_fn read_input
+  run resolve_token --yes
+  assert_status 1
+  assert_output_contains "K3S_TOKEN is required with --yes."
+  assert_no_calls
 }
 
 # -------------------------------------------------------------- k3s install
@@ -128,36 +206,57 @@ test_install_k3s_initial_master_forwards_additional_arguments() {
   assert_called "sh -s - server --cluster-init --flannel-backend wireguard-native --disable=traefik"
 }
 
-test_install_k3s_master_joins_with_params_and_additional_arguments() {
-  run install_k3s_master "--server=https://m:6443 --token=t" "--disable=traefik"
+test_install_k3s_master_joins_the_server_with_additional_arguments() {
+  run install_k3s_master "https://m:6443" "--disable=traefik"
   assert_status 0
-  assert_called "sh -s - server --server=https://m:6443 --token=t --flannel-backend wireguard-native --disable=traefik"
+  assert_called "sh -s - server --server https://m:6443 --flannel-backend wireguard-native --disable=traefik"
 }
 
 test_install_k3s_master_reports_failure() {
   mock_fail sh
-  run install_k3s_master "--server=x --token=t" ""
+  run install_k3s_master "https://m:6443" ""
   assert_output_contains "Failed to install k3s"
 }
 
-test_install_k3s_agent_joins_with_params() {
-  run install_k3s_agent "--server=https://m:6443 --token=t"
+test_install_k3s_agent_joins_the_server() {
+  run install_k3s_agent "https://m:6443"
   assert_status 0
   assert_called "curl -sfL https://get.k3s.io"
-  assert_called "sh -s - agent --server=https://m:6443 --token=t"
+  assert_called "sh -s - agent"
+}
+
+test_install_k3s_agent_passes_the_server_url_in_the_environment() {
+  sh() { echo "sh K3S_URL=$K3S_URL K3S_TOKEN=$K3S_TOKEN" >>"$CALLS"; }
+  K3S_TOKEN=s3cret run install_k3s_agent "https://m:6443"
+  assert_called "sh K3S_URL=https://m:6443 K3S_TOKEN=s3cret"
+}
+
+test_install_k3s_master_reaches_the_installer_with_the_token_in_the_environment() {
+  sh() { echo "sh K3S_TOKEN=$K3S_TOKEN" >>"$CALLS"; }
+  K3S_TOKEN=s3cret run install_k3s_master "https://m:6443" ""
+  assert_called "sh K3S_TOKEN=s3cret"
+}
+
+test_the_join_token_never_appears_on_a_command_line_or_in_output() {
+  K3S_TOKEN=s3cret run install_k3s_agent "https://m:6443"
+  refute_output_contains "s3cret"
+  refute_called_matching "s3cret"
+  K3S_TOKEN=s3cret run install_k3s_master "https://m:6443" ""
+  refute_output_contains "s3cret"
+  refute_called_matching "s3cret"
 }
 
 test_install_k3s_agent_reports_failure() {
   mock_fail sh
-  run install_k3s_agent "--server=x --token=t"
+  run install_k3s_agent "https://m:6443"
   assert_output_contains "Failed to install k3s"
 }
 
 test_run_k3s_installer_never_evaluates_its_arguments() {
-  run install_k3s_agent "--server=x; touch $TEST_TMP/pwned"
+  run install_k3s_master "x; touch $TEST_TMP/pwned" ""
   assert_status 0
   [[ ! -e "$TEST_TMP/pwned" ]] || fail "argument was executed as shell code"
-  assert_called "sh -s - agent --server=x; touch $TEST_TMP/pwned"
+  assert_called "sh -s - server --server x; touch $TEST_TMP/pwned --flannel-backend wireguard-native"
 }
 
 test_show_k3s_token_prints_the_server_token() {
@@ -194,6 +293,14 @@ test_uninstall_k3s_runs_uninstaller_when_confirmed() {
   assert_status 0
   assert_called "sudo /usr/local/bin/k3s-uninstall.sh"
   assert_output_contains "Uninstalling k3s..."
+}
+
+test_uninstall_k3s_with_yes_does_not_ask() {
+  script_fn question
+  run uninstall_k3s --yes
+  assert_status 0
+  assert_called "sudo /usr/local/bin/k3s-uninstall.sh"
+  assert_calls "sudo /usr/local/bin/k3s-uninstall.sh"
 }
 
 test_uninstall_k3s_does_nothing_when_declined() {

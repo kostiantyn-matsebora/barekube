@@ -1,13 +1,11 @@
-echo "# This file is located at './commands/install/master.sh'."
-echo "# It contains the implementation for the 'barekube install master' command."
-echo "# The code you write here will be wrapped by a function named 'barekube_install_master_command()'."
-echo "# Feel free to edit this file; your changes will persist when regenerating."
-inspect_args
 # shellcheck disable=SC2154
 check_k3s_installed "${args[--reinstall]}"
-MASTER_PARAMS=$(gather_master_params) || exit 1
+SERVER_URL=$(resolve_server_url "${args[--server]:-}" "${args[--yes]:+--yes}") || exit 1
+K3S_TOKEN=$(resolve_token "${args[--yes]:+--yes}") || exit 1
+export K3S_TOKEN
 echo_info "Installing agent node..."
 
-install_k3s_agent "$MASTER_PARAMS"
+install_k3s_agent "$SERVER_URL"
 setup_gvisor
 echo_final "Failed to install k3s agent node." "Another k3s agent node installed successfully."
+report_state "installed"

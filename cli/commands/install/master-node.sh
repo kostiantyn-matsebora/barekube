@@ -1,17 +1,17 @@
-echo "# This file is located at './commands/install/master.sh'."
-echo "# It contains the implementation for the 'barekube install master' command."
-echo "# The code you write here will be wrapped by a function named 'barekube_install_master_command()'."
-echo "# Feel free to edit this file; your changes will persist when regenerating."
-inspect_args
 # shellcheck disable=SC2154
 check_k3s_installed "${args[--reinstall]}"
-MASTER_PARAMS=$(gather_master_params) || exit 1
-ADDITIONAL_ARGS=$(gather_additional_args)
+SERVER_URL=$(resolve_server_url "${args[--server]:-}" "${args[--yes]:+--yes}") || exit 1
+K3S_TOKEN=$(resolve_token "${args[--yes]:+--yes}") || exit 1
+export K3S_TOKEN
+eval "TLS_SANS=(${args[--tls-san]:-})"
+eval "DISABLE_COMPONENTS=(${args[--disable]:-})"
+ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
 echo_info "Installing master node..."
 
-echo_info "Master parameters: $MASTER_PARAMS"
+echo_info "Joining cluster at: $SERVER_URL"
 echo_info "Additional arguments: $ADDITIONAL_ARGS"
 
-install_k3s_master "$MASTER_PARAMS" "$ADDITIONAL_ARGS"
+install_k3s_master "$SERVER_URL" "$ADDITIONAL_ARGS"
 setup_gvisor
 echo_final "Failed to install k3s master node." "Another k3s master node installed successfully."
+report_state "installed"

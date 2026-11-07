@@ -82,3 +82,21 @@ Options:
 MIT License: https://github.com/kostiantyn-matsebora/barekube/blob/master/LICENSE
 Copyright (c) 2025 Kostiantyn Matsebora
 ```
+
+## Running barekube from scripts
+
+By default the install commands ask you questions. To run them from a script, pass the answers as flags and add `--yes`. Barekube then stops with an error if something is missing, instead of waiting for you to type it.
+
+The join token is not a flag. Put it in the `K3S_TOKEN` environment variable, so it stays out of `ps` output and your shell history.
+
+```shell
+# First master
+barekube install initial-master --yes --tls-san k8s.home.lan --disable traefik
+
+# Another master or an agent
+export K3S_TOKEN='<token printed by the first master>'
+barekube install master-node --yes --server https://192.168.1.10:6443
+barekube install agent-node  --yes --server https://192.168.1.10:6443
+```
+
+When an install command finishes it prints `installed` or `already installed`, so a script can tell whether anything changed.

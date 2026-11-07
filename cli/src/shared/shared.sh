@@ -72,6 +72,12 @@ function exit_if_error(){
     fi
 }
 
+# Prints a plain, stable state line ("installed", "already installed") that
+# tools driving the CLI can match on.
+function report_state(){
+    echo "$1"
+}
+
 function echo_final(){
     local STATUS=$?
     if [ "$STATUS" -ne "0" ]
