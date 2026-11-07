@@ -31,7 +31,7 @@ cp inventory.example.yml inventory.yml     # your machines
 ./play.sh
 ```
 
-- **Needs:** Ansible or Docker on your computer, SSH access to the machines
+- **Needs:** [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) or [Docker](https://docs.docker.com/get-docker/) on your computer, and [SSH](https://www.openssh.com/) access to the machines
 - **Result:** a cluster, and its kubeconfig in `~/.barekube/default/kubeconfig`
 - **Again:** run `./play.sh` to add machines or change settings
 - **More:** [settings, removing nodes, teardown](orchestration/ansible/README.md)
