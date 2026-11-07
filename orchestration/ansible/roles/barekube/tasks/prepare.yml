@@ -16,7 +16,8 @@
   when: barekube_cli_path | length == 0
   run_once: true
   delegate_to: localhost
-  become: false
+  vars:
+    ansible_become: false
   block:
     - name: Make a work directory
       ansible.builtin.tempfile:
@@ -70,7 +71,8 @@
   when: barekube_work.path is defined
   run_once: true
   delegate_to: localhost
-  become: false
+  vars:
+    ansible_become: false
 
 # The CLI checks what is installed and does nothing when it is all there, but it
 # does not report whether it changed anything, so these tasks are never "changed".
