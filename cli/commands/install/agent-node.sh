@@ -6,6 +6,6 @@ export K3S_TOKEN
 echo_info "Installing agent node..."
 
 install_k3s_agent "$SERVER_URL"
-setup_gvisor
+setup_gvisor "${args[--gvisor-default]:+on}"
 echo_final "Failed to install k3s agent node." "Another k3s agent node installed successfully."
 report_state "installed"

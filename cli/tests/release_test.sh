@@ -226,6 +226,42 @@ test_install_longhorn_dependencies() {
   assert_output_contains "https://longhorn.io/kb/troubleshooting-volume-with-multipath/"
 }
 
+test_install_commands_document_the_gvisor_default_flag() {
+  local cmd
+  for cmd in initial-master master-node agent-node; do
+    run barekube_cli install "$cmd" --help
+    assert_output_contains "--gvisor-default"
+  done
+  run barekube_cli install gvisor --help
+  assert_output_contains "--default"
+  assert_output_contains "--no-default"
+}
+
+test_install_gvisor_default_and_no_default_cannot_be_combined() {
+  run barekube_cli install gvisor --default --no-default
+  assert_status 1
+  refute_called_matching '^sudo systemctl'
+}
+
+test_install_gvisor_default_writes_the_k3s_setting() {
+  run barekube_cli install gvisor --default
+  assert_status 0
+  assert_called "sudo tee /etc/rancher/k3s/config.yaml.d/barekube-gvisor-default.yaml"
+  assert_called "sudo systemctl restart k3s"
+}
+
+test_install_gvisor_no_default_removes_the_k3s_setting() {
+  run barekube_cli install gvisor --no-default
+  assert_status 0
+  assert_called "sudo rm -f /etc/rancher/k3s/config.yaml.d/barekube-gvisor-default.yaml"
+}
+
+test_install_agent_node_can_make_gvisor_the_default() {
+  K3S_TOKEN=s3cret run barekube_cli install agent-node --reinstall --yes --server https://10.0.0.1:6443 --gvisor-default
+  assert_status 0
+  assert_called "sudo tee /etc/rancher/k3s/config.yaml.d/barekube-gvisor-default.yaml"
+}
+
 test_install_gvisor_installs_and_registers_the_runtime() {
   run barekube_cli install gvisor
   assert_status 0

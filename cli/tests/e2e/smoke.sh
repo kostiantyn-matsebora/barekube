@@ -201,6 +201,74 @@ MANIFEST
   kc delete pod sandboxed --wait=false >/dev/null
 }
 
+# A pod that names no RuntimeClass, pinned to NODE; prints what dmesg says
+# inside it. gVisor answers with its own banner.
+dmesg_in_plain_pod_on() {
+  kc delete pod plain --ignore-not-found --wait=true >/dev/null
+  kc run plain --image="$BUSYBOX" --restart=Never \
+    --overrides="{\"spec\":{\"nodeName\":\"$1\"}}" --command -- sleep 600 >/dev/null
+  kc wait --for=condition=Ready pod/plain --timeout=240s >/dev/null || { kc describe pod plain | tail -20; return 1; }
+  kc exec plain -- dmesg
+  kc delete pod plain --wait=true >/dev/null
+}
+
+is_sandboxed() { [[ "${1,,}" == *gvisor* ]]; }
+
+check_default_runtime_matches_the_setting() {
+  local banner
+  banner="$(dmesg_in_plain_pod_on agent-1)" || return 1
+  if [[ "$GVISOR_DEFAULT" == "true" ]]; then
+    is_sandboxed "$banner" || { log "a plain pod is not sandboxed although gVisor is the default"; return 1; }
+  else
+    ! is_sandboxed "$banner" || { log "a plain pod is sandboxed although gVisor is not the default"; return 1; }
+  fi
+}
+
+check_runc_runtime_class_opts_out() {
+  kc apply -f - <<MANIFEST
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata: {name: runc}
+handler: runc
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: host-runtime}
+spec:
+  runtimeClassName: runc
+  nodeName: agent-1
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: $BUSYBOX
+      command: [sleep, "600"]
+MANIFEST
+  kc wait --for=condition=Ready pod/host-runtime --timeout=240s || { kc describe pod host-runtime | tail -20; return 1; }
+  local banner
+  banner="$(kc exec host-runtime -- dmesg)"
+  ! is_sandboxed "$banner" || { log "a runc pod is sandboxed"; return 1; }
+  kc delete pod host-runtime --wait=false >/dev/null
+}
+
+# Switches the default on agent-1 to the opposite of the cluster's setting with
+# the install gvisor flags, checks it takes effect, then restores it.
+check_gvisor_default_can_be_switched_on_a_node() {
+  local flip restore expect_sandboxed
+  if [[ "$GVISOR_DEFAULT" == "true" ]]; then
+    flip=--no-default restore=--default expect_sandboxed=false
+  else
+    flip=--default restore=--no-default expect_sandboxed=true
+  fi
+  node agent-1 barekube install gvisor "$flip" >/dev/null
+  wait_for 300 "agent-1 is Ready after $flip" node_ready agent-1 || return 1
+  [[ "$(is_sandboxed "$(dmesg_in_plain_pod_on agent-1)" && echo true || echo false)" == "$expect_sandboxed" ]] \
+    || { log "after $flip a plain pod on agent-1 should be sandboxed=$expect_sandboxed"; return 1; }
+  node agent-1 barekube install gvisor "$restore" >/dev/null
+  wait_for 300 "agent-1 is Ready after $restore" node_ready agent-1 || return 1
+  [[ "$(is_sandboxed "$(dmesg_in_plain_pod_on agent-1)" && echo true || echo false)" == "$GVISOR_DEFAULT" ]] \
+    || { log "after $restore a plain pod on agent-1 should be sandboxed=$GVISOR_DEFAULT"; return 1; }
+}
+
 # ------------------------------------------------------ Longhorn prerequisites
 
 runsc_runtime_stanzas() {
@@ -305,6 +373,9 @@ check "services and DNS resolve" check_service_and_dns
 check "a NodePort answers on every node" check_nodeport_on_every_node
 check "gVisor is installed and registered with k3s on every node" check_gvisor_is_installed_on_every_node
 check "a pod runs sandboxed by gVisor" check_gvisor_runtime
+check "pods without a RuntimeClass follow the cluster's gVisor default ($GVISOR_DEFAULT)" check_default_runtime_matches_the_setting
+check "a runc RuntimeClass opts a pod out of gVisor" check_runc_runtime_class_opts_out
+check "the gVisor default can be switched on an installed node, both ways" check_gvisor_default_can_be_switched_on_a_node
 check "Longhorn prerequisites are in place on every node" check_longhorn_prerequisites
 check "re-running the gVisor install keeps the cluster healthy" check_gvisor_install_command_can_be_rerun
 check "re-running the Longhorn dependencies install works" check_longhorn_install_command_can_be_rerun

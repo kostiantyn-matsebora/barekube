@@ -5,6 +5,10 @@ GVISOR_KEYRING="/usr/share/keyrings/gvisor-archive-keyring.gpg"
 GVISOR_REPO_URL="https://storage.googleapis.com/gvisor/releases"
 GVISOR_APT_SOURCE="/etc/apt/sources.list.d/gvisor.list"
 K3S_CONTAINERD_DIR="/var/lib/rancher/k3s/agent/etc/containerd"
+# k3s merges every file in this directory into its configuration. The file
+# belongs to barekube, so the default can be switched on and off cleanly.
+K3S_CONFIG_DIR="/etc/rancher/k3s/config.yaml.d"
+GVISOR_DEFAULT_CONFIG="$K3S_CONFIG_DIR/barekube-gvisor-default.yaml"
 
 install_gvisor_prerequisites() {
     run_privileged "Installing gVisor dependencies..." "Failed to install gVisor dependencies" \
@@ -74,6 +78,31 @@ add_runsc_to_template() {
     return 0
 }
 
+# Makes runsc the runtime of every pod that does not name a RuntimeClass on this
+# node ("on"), or stops doing so ("off"). Returns 0 when it changed something,
+# 1 when the node was already as asked.
+# Usage: set_gvisor_default on|off
+set_gvisor_default() {
+    if [[ "$1" == "on" ]]
+    then
+        sudo grep -qsx "default-runtime: runsc" "$GVISOR_DEFAULT_CONFIG" && return 1
+        run_privileged "Preparing the k3s configuration directory..." "Failed to create $K3S_CONFIG_DIR" \
+            mkdir -p "$K3S_CONFIG_DIR"
+        echo_info "Making gVisor the default runtime..."
+        echo "default-runtime: runsc" | sudo tee "$GVISOR_DEFAULT_CONFIG" > /dev/null
+        exit_if_error "Failed to write $GVISOR_DEFAULT_CONFIG"
+        return 0
+    fi
+    sudo test -f "$GVISOR_DEFAULT_CONFIG" || return 1
+    echo_info "Removing gVisor as the default runtime..."
+    sudo rm -f "$GVISOR_DEFAULT_CONFIG"
+    exit_if_error "Failed to remove $GVISOR_DEFAULT_CONFIG"
+    return 0
+}
+
+# Registers the runsc runtime with k3s and, when asked, switches the default
+# runtime; k3s is restarted once if anything changed.
+# Usage: register_gvisor_to_k3s [on|off]   (empty leaves the default as it is)
 register_gvisor_to_k3s() {
     local SERVICE CHANGED=1
     SERVICE="$(k3s_service_name)"
@@ -83,6 +112,10 @@ register_gvisor_to_k3s() {
 
     add_runsc_to_template "$K3S_CONTAINERD_DIR/config.toml.tmpl" runsc_runtime_config_v2 && CHANGED=0
     add_runsc_to_template "$K3S_CONTAINERD_DIR/config-v3.toml.tmpl" runsc_runtime_config_v3 && CHANGED=0
+    if [[ -n "$1" ]]
+    then
+        set_gvisor_default "$1" && CHANGED=0
+    fi
     if [[ "$CHANGED" -ne 0 ]]
     then
         echo_message "The runsc runtime is already registered."
@@ -93,7 +126,8 @@ register_gvisor_to_k3s() {
 }
 
 # Installs gVisor and wires it into k3s - the pair every node install needs.
+# Usage: setup_gvisor [on|off]
 setup_gvisor() {
     install_gvisor
-    register_gvisor_to_k3s
+    register_gvisor_to_k3s "$1"
 }

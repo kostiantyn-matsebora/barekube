@@ -133,3 +133,25 @@ barekube install agent-node  --yes --server https://192.168.1.10:6443
 ```
 
 When an install command finishes it prints `installed` or `already installed`, so a script can tell whether anything changed.
+
+## gVisor as the default runtime
+
+By default pods run with the normal runtime (runc) and opt in to gVisor with a `RuntimeClass` whose handler is `runsc`. To run every pod in a gVisor sandbox instead, add `--gvisor-default` when you install a node, or switch a node that is already installed:
+
+```shell
+barekube install initial-master --gvisor-default
+barekube install gvisor --default       # an installed node
+barekube install gvisor --no-default    # and back
+```
+
+Do it on every node, so pods behave the same wherever they land.
+
+Pods that need privileged access or host devices, Longhorn for example, can't run in a gVisor sandbox. Give them a `RuntimeClass` whose handler is `runc`:
+
+```yaml
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: runc
+handler: runc
+```

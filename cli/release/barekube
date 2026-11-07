@@ -135,6 +135,11 @@ barekube_install_initial_master_usage() {
     echo
 
     # :flag.usage
+    printf "  %s\n" "$(magenta "--gvisor-default")"
+    printf "    Make gVisor the default runtime of pods on this node\n"
+    echo
+
+    # :flag.usage
     printf "  %s\n" "$(magenta "--yes, -y")"
     printf "    Do not prompt; fail when a required value is missing\n"
     echo
@@ -179,6 +184,11 @@ barekube_install_master_node_usage() {
     # :flag.usage
     printf "  %s\n" "$(magenta "--reinstall")"
     printf "    Reinstall k3s\n"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--gvisor-default")"
+    printf "    Make gVisor the default runtime of pods on this node\n"
     echo
 
     # :flag.usage
@@ -242,6 +252,11 @@ barekube_install_agent_node_usage() {
     echo
 
     # :flag.usage
+    printf "  %s\n" "$(magenta "--gvisor-default")"
+    printf "    Make gVisor the default runtime of pods on this node\n"
+    echo
+
+    # :flag.usage
     printf "  %s\n" "$(magenta "--server URL")"
     printf "    URL of the cluster to join, for example https://192.168.1.1:6443\n"
     echo
@@ -272,13 +287,26 @@ barekube_install_gvisor_usage() {
   printf "barekube install gvisor - Install and configure gVisor for existing k3s node\n\n"
 
   printf "%s\n" "$(bold "Usage:")"
-  printf "  barekube install gvisor\n"
+  printf "  barekube install gvisor [OPTIONS]\n"
   printf "  barekube install gvisor --help | -h\n"
   echo
 
   # :command.long_usage
   if [[ -n "$long_usage" ]]; then
     printf "%s\n" "$(bold "Options:")"
+
+    # :command.usage_flags
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--default")"
+    printf "    Make gVisor the default runtime of pods on this node\n"
+    printf "    %s\n" "Conflicts: --no-default"
+    echo
+
+    # :flag.usage
+    printf "  %s\n" "$(magenta "--no-default")"
+    printf "    Stop making gVisor the default runtime of pods on this node\n"
+    printf "    %s\n" "Conflicts: --default"
+    echo
 
     # :command.usage_fixed_flags
     printf "  %s\n" "$(magenta "--help, -h")"
@@ -711,6 +739,10 @@ GVISOR_KEYRING="/usr/share/keyrings/gvisor-archive-keyring.gpg"
 GVISOR_REPO_URL="https://storage.googleapis.com/gvisor/releases"
 GVISOR_APT_SOURCE="/etc/apt/sources.list.d/gvisor.list"
 K3S_CONTAINERD_DIR="/var/lib/rancher/k3s/agent/etc/containerd"
+# k3s merges every file in this directory into its configuration. The file
+# belongs to barekube, so the default can be switched on and off cleanly.
+K3S_CONFIG_DIR="/etc/rancher/k3s/config.yaml.d"
+GVISOR_DEFAULT_CONFIG="$K3S_CONFIG_DIR/barekube-gvisor-default.yaml"
 
 install_gvisor_prerequisites() {
     run_privileged "Installing gVisor dependencies..." "Failed to install gVisor dependencies" \
@@ -780,6 +812,31 @@ add_runsc_to_template() {
     return 0
 }
 
+# Makes runsc the runtime of every pod that does not name a RuntimeClass on this
+# node ("on"), or stops doing so ("off"). Returns 0 when it changed something,
+# 1 when the node was already as asked.
+# Usage: set_gvisor_default on|off
+set_gvisor_default() {
+    if [[ "$1" == "on" ]]
+    then
+        sudo grep -qsx "default-runtime: runsc" "$GVISOR_DEFAULT_CONFIG" && return 1
+        run_privileged "Preparing the k3s configuration directory..." "Failed to create $K3S_CONFIG_DIR" \
+            mkdir -p "$K3S_CONFIG_DIR"
+        echo_info "Making gVisor the default runtime..."
+        echo "default-runtime: runsc" | sudo tee "$GVISOR_DEFAULT_CONFIG" > /dev/null
+        exit_if_error "Failed to write $GVISOR_DEFAULT_CONFIG"
+        return 0
+    fi
+    sudo test -f "$GVISOR_DEFAULT_CONFIG" || return 1
+    echo_info "Removing gVisor as the default runtime..."
+    sudo rm -f "$GVISOR_DEFAULT_CONFIG"
+    exit_if_error "Failed to remove $GVISOR_DEFAULT_CONFIG"
+    return 0
+}
+
+# Registers the runsc runtime with k3s and, when asked, switches the default
+# runtime; k3s is restarted once if anything changed.
+# Usage: register_gvisor_to_k3s [on|off]   (empty leaves the default as it is)
 register_gvisor_to_k3s() {
     local SERVICE CHANGED=1
     SERVICE="$(k3s_service_name)"
@@ -789,6 +846,10 @@ register_gvisor_to_k3s() {
 
     add_runsc_to_template "$K3S_CONTAINERD_DIR/config.toml.tmpl" runsc_runtime_config_v2 && CHANGED=0
     add_runsc_to_template "$K3S_CONTAINERD_DIR/config-v3.toml.tmpl" runsc_runtime_config_v3 && CHANGED=0
+    if [[ -n "$1" ]]
+    then
+        set_gvisor_default "$1" && CHANGED=0
+    fi
     if [[ "$CHANGED" -ne 0 ]]
     then
         echo_message "The runsc runtime is already registered."
@@ -799,9 +860,10 @@ register_gvisor_to_k3s() {
 }
 
 # Installs gVisor and wires it into k3s - the pair every node install needs.
+# Usage: setup_gvisor [on|off]
 setup_gvisor() {
     install_gvisor
-    register_gvisor_to_k3s
+    register_gvisor_to_k3s "$1"
 }
 
 # ./src/k3s.sh
@@ -1200,7 +1262,7 @@ barekube_install_initial_master_command() {
   ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
 
   install_k3s_initial_master "${ADDITIONAL_ARGS}"
-  setup_gvisor
+  setup_gvisor "${args[--gvisor-default]:+on}"
   show_k3s_token
   echo_final "Failed to install initial k3s master node." "Initial k3s master node installed successfully."
   report_state "installed"
@@ -1225,7 +1287,7 @@ barekube_install_master_node_command() {
   echo_info "Additional arguments: $ADDITIONAL_ARGS"
 
   install_k3s_master "$SERVER_URL" "$ADDITIONAL_ARGS"
-  setup_gvisor
+  setup_gvisor "${args[--gvisor-default]:+on}"
   echo_final "Failed to install k3s master node." "Another k3s master node installed successfully."
   report_state "installed"
 
@@ -1243,7 +1305,7 @@ barekube_install_agent_node_command() {
   echo_info "Installing agent node..."
 
   install_k3s_agent "$SERVER_URL"
-  setup_gvisor
+  setup_gvisor "${args[--gvisor-default]:+on}"
   echo_final "Failed to install k3s agent node." "Another k3s agent node installed successfully."
   report_state "installed"
 
@@ -1253,7 +1315,11 @@ barekube_install_agent_node_command() {
 barekube_install_gvisor_command() {
 
   # ./commands/install/gvisor.sh
-  setup_gvisor
+  # shellcheck disable=SC2154
+  GVISOR_DEFAULT_MODE=""
+  [[ -n "${args[--default]:-}" ]] && GVISOR_DEFAULT_MODE="on"
+  [[ -n "${args[--no-default]:-}" ]] && GVISOR_DEFAULT_MODE="off"
+  setup_gvisor "$GVISOR_DEFAULT_MODE"
 
 }
 
@@ -1617,6 +1683,14 @@ barekube_install_initial_master_parse_requirements() {
         ;;
 
       # :flag.case
+      --gvisor-default)
+
+        # :flag.case_no_arg
+        args['--gvisor-default']=1
+        shift
+        ;;
+
+      # :flag.case
       --yes | -y)
 
         # :flag.case_no_arg
@@ -1729,6 +1803,14 @@ barekube_install_master_node_parse_requirements() {
 
         # :flag.case_no_arg
         args['--reinstall']=1
+        shift
+        ;;
+
+      # :flag.case
+      --gvisor-default)
+
+        # :flag.case_no_arg
+        args['--gvisor-default']=1
         shift
         ;;
 
@@ -1863,6 +1945,14 @@ barekube_install_agent_node_parse_requirements() {
         ;;
 
       # :flag.case
+      --gvisor-default)
+
+        # :flag.case_no_arg
+        args['--gvisor-default']=1
+        shift
+        ;;
+
+      # :flag.case
       --server)
 
         # :flag.case_arg
@@ -1928,6 +2018,31 @@ barekube_install_gvisor_parse_requirements() {
   while [[ $# -gt 0 ]]; do
     key="$1"
     case "$key" in
+      # :flag.case
+      --default)
+        # :flag.conflicts
+        if [[ -n "${args['--no-default']:-}" ]]; then
+          printf "conflicting options: %s cannot be used with %s\n" "$key" "--no-default" >&2
+          exit 1
+        fi
+
+        # :flag.case_no_arg
+        args['--default']=1
+        shift
+        ;;
+
+      # :flag.case
+      --no-default)
+        # :flag.conflicts
+        if [[ -n "${args['--default']:-}" ]]; then
+          printf "conflicting options: %s cannot be used with %s\n" "$key" "--default" >&2
+          exit 1
+        fi
+
+        # :flag.case_no_arg
+        args['--no-default']=1
+        shift
+        ;;
 
       -?*)
         printf "invalid option: %s\n" "$key" >&2
