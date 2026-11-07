@@ -1,0 +1,52 @@
+---
+# --- The barekube CLI -------------------------------------------------------
+# The release to install. Always a tag, never a branch. It is the release this
+# playbook was published with: the release workflow refuses a tag that differs.
+barekube_version: v0.4.0
+# Where the releases live.
+barekube_release_url: "https://github.com/kostiantyn-matsebora/barekube/releases/download/{{ barekube_version }}"
+# Check the Sigstore signature of the release (needs cosign on this machine).
+# The checksum is always checked.
+barekube_verify_signature: true
+# Install this local file instead of downloading a release (for development).
+barekube_cli_path: ""
+# The release workflow that signs the releases.
+barekube_signer_identity: "^https://github\\.com/kostiantyn-matsebora/barekube/\\.github/workflows/release\\.yml@refs/tags/v"
+
+# --- The cluster ------------------------------------------------------------
+# Install the packages Longhorn needs on every node.
+barekube_longhorn: true
+# Run every new pod in the gVisor sandbox unless it names another RuntimeClass.
+barekube_gvisor_default: false
+# The address of a node, used by the other nodes to reach it.
+barekube_address: "{{ ansible_host | default(inventory_hostname) }}"
+# Where nodes join. The first master by default; set it to your own virtual IP
+# or load balancer if you have one. barekube installs none.
+barekube_join_endpoint: "https://{{ hostvars[groups['masters'][0]].barekube_address }}:6443"
+# Extra names for the API server certificate (the first master's address and
+# the join endpoint's host are always included).
+barekube_tls_san: []
+# k3s components to turn off, for example [servicelb, traefik].
+barekube_disable: []
+# Anything else to pass to the k3s server.
+barekube_extra_args: ""
+
+# The flags every server install gets, built from the settings above.
+barekube_endpoint_host: "{{ barekube_join_endpoint | regex_replace('^https?://([^:/]+).*$', '\\1') }}"
+barekube_server_sans: "{{ ([barekube_endpoint_host, barekube_address] + barekube_tls_san) | unique }}"
+barekube_server_flags: >-
+  {{ (['--tls-san'] | product(barekube_server_sans) | map('list') | flatten)
+  + (['--disable'] | product(barekube_disable) | map('list') | flatten)
+  + (['--extra-args', barekube_extra_args] if barekube_extra_args | length > 0 else []) }}
+
+# --- On this machine --------------------------------------------------------
+# Where the kubeconfig is saved.
+barekube_state_dir: "{{ lookup('ansible.builtin.env', 'HOME') }}/.barekube/{{ barekube_cluster_name }}"
+barekube_cluster_name: default
+
+# How long to wait for a node to become Ready, in seconds.
+barekube_ready_timeout: 300
+
+# Show the output of the join commands. They are hidden by default because the
+# join token is in their environment, which verbose Ansible output can print.
+barekube_show_output: false

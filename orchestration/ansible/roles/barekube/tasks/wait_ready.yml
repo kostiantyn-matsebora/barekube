@@ -1,0 +1,13 @@
+---
+# Waits until this node is Ready, asking the initial master.
+- name: Wait for the node to be Ready
+  ansible.builtin.command: >-
+    k3s kubectl wait --for=condition=Ready
+    node/{{ ansible_facts['hostname'] | lower }}
+    --timeout=30s
+  delegate_to: "{{ groups['masters'][0] }}"
+  register: barekube_ready
+  until: barekube_ready.rc == 0
+  retries: "{{ (barekube_ready_timeout | int / 30) | round(0, 'ceil') | int }}"
+  delay: 1
+  changed_when: false

@@ -1,0 +1,25 @@
+# The inventory is the description of your cluster: which machines, and which
+# of them are masters. The first host under `masters` becomes the initial master.
+all:
+  children:
+    masters:
+      hosts:
+        master-1: { ansible_host: 192.168.1.10 }
+        master-2: { ansible_host: 192.168.1.15 }
+        master-3: { ansible_host: 192.168.1.5 }
+    agents:
+      hosts:
+        agent-1: { ansible_host: 192.168.1.50 }
+        agent-2: { ansible_host: 192.168.1.30 }
+  vars:
+    ansible_user: ubuntu
+    ansible_become: true
+
+    # Settings of the cluster. Every one has a default; see
+    # roles/barekube/defaults/main.yml.
+    barekube_version: v0.4.0
+    barekube_longhorn: true
+    barekube_gvisor_default: false
+    barekube_disable: [servicelb, traefik]
+    # barekube_tls_san: [k8s.home.lan]
+    # barekube_join_endpoint: https://k8s.home.lan:6443

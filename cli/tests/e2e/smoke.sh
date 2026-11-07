@@ -335,6 +335,16 @@ check_longhorn_install_command_can_be_rerun() {
 
 # ----------------------------------------------------- failures and day two
 
+# Only for clusters built by the playbook: running it again must change nothing.
+check_playbook_rerun_changes_nothing() {
+  local out
+  out="$(run_playbook 2>&1)" || { printf '%s\n' "$out" | tail -60; return 1; }
+  printf '%s\n' "$out" | grep -E "^(master|agent)-[0-9]+ +:" || true
+  ! printf '%s\n' "$out" | grep -E "^(master|agent)-[0-9]+ +:" | grep -qvE "changed=0 +unreachable=0 +failed=0" \
+    || { log "the playbook changed something on a second run"; return 1; }
+  [[ -s "$STATE_DIR/ansible/kubeconfig" ]] || { log "the playbook saved no kubeconfig"; return 1; }
+}
+
 check_idempotent_install() {
   local out
   out="$(node master-1 barekube install initial-master --yes | last_line)"
@@ -406,6 +416,9 @@ check "Longhorn prerequisites are in place on every node" check_longhorn_prerequ
 check "re-running the gVisor install keeps the cluster healthy" check_gvisor_install_command_can_be_rerun
 check "re-running the Longhorn dependencies install works" check_longhorn_install_command_can_be_rerun
 check "re-running installs is idempotent" check_idempotent_install
+if [[ "$PROVISIONER" == "ansible" ]]; then
+  check "running the playbook again changes nothing and saves the kubeconfig" check_playbook_rerun_changes_nothing
+fi
 check "the cluster survives losing a master" check_cluster_survives_losing_a_master
 check "an agent can be stopped and started" check_agent_stop_and_start
 check "an agent can be uninstalled and removed" check_agent_uninstall

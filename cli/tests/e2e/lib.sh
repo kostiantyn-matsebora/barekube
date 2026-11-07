@@ -11,8 +11,12 @@ MASTERS=(master-1 master-2 master-3)
 AGENTS=(agent-1 agent-2)
 NODES=("${MASTERS[@]}" "${AGENTS[@]}")
 
+# How the cluster is built: "script" runs the barekube commands one node at a
+# time, "ansible" runs the playbook in orchestration/ansible.
+PROVISIONER="${E2E_PROVISIONER:-script}"
+
 # Whether gVisor is the default runtime of the cluster (the matrix of the E2E
-# workflow runs both). The flag goes on every node, so the cluster is uniform.
+# workflow runs both).
 GVISOR_DEFAULT="${E2E_GVISOR_DEFAULT:-false}"
 GVISOR_FLAGS=()
 [[ "$GVISOR_DEFAULT" == "true" ]] && GVISOR_FLAGS=(--gvisor-default)
@@ -20,6 +24,21 @@ GVISOR_FLAGS=()
 # Disabled on purpose, as in the README examples: the test cluster has no
 # service load balancer or ingress; those belong to the layer above barekube.
 K3S_FLAGS=(--disable servicelb --disable traefik)
+
+# run_playbook: runs the playbook of orchestration/ansible against the test
+# nodes, with the CLI of this checkout.
+run_playbook() {
+  (
+    cd "$ROOT/orchestration/ansible"
+    ansible-playbook -i "$STATE_DIR/inventory.yml" site.yml \
+      -e "barekube_cli_path=$ROOT/cli/release/barekube" \
+      -e barekube_verify_signature=false \
+      -e barekube_show_output=true \
+      -e "barekube_gvisor_default=$GVISOR_DEFAULT" \
+      -e '{"barekube_disable": ["servicelb", "traefik"]}' \
+      -e "barekube_state_dir=$STATE_DIR/ansible"
+  )
+}
 
 log() { printf '[%s] %s\n' "$(date +%T)" "$*"; }
 group() { printf '::group::%s\n' "$*"; }

@@ -1,0 +1,10 @@
+---
+# The gVisor default is a setting of the cluster, applied from a master. Both
+# directions are safe to repeat; the CLI says what it changed.
+- name: Set whether gVisor is the default for pods
+  ansible.builtin.command: >-
+    barekube install gvisor {{ '--default' if barekube_gvisor_default | bool else '--no-default' }}
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  register: barekube_result
+  changed_when: "'barekube-gvisor-default.yaml' in barekube_result.stdout"
