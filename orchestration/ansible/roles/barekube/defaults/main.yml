@@ -2,7 +2,7 @@
 # --- The barekube CLI -------------------------------------------------------
 # The release to install. Always a tag, never a branch. It is the release this
 # playbook was published with: the release workflow refuses a tag that differs.
-barekube_version: v0.4.0
+barekube_version: v0.4.1
 # Where the releases live.
 barekube_release_url: "https://github.com/kostiantyn-matsebora/barekube/releases/download/{{ barekube_version }}"
 # Check the Sigstore signature of the release (needs cosign on this machine).
