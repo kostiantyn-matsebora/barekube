@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/kostiantyn-matsebora/barekube/master/assets/barekube-logo.png" alt="barekube" width="96" align="right">
+
 # barekube
 
 [![CLI tests](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/cli-tests.yml/badge.svg?branch=master)](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/cli-tests.yml)
