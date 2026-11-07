@@ -1,0 +1,35 @@
+name: Publish to Galaxy
+
+# Publishes the collection of an existing release to Ansible Galaxy, for when the
+# publish step of the release failed or the token was added afterwards. Galaxy
+# does not accept a version twice, so this cannot replace one that is there.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v0.4.1
+        required: true
+
+permissions: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Stop without a token
+        if: ${{ env.GALAXY_API_KEY == '' }}
+        run: |
+          echo "::error::GALAXY_API_KEY is not set."
+          exit 1
+
+      - name: Publish
+        run: |
+          pipx install ansible-core
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'kostiantyn_matsebora-barekube-*.tar.gz'
+          ansible-galaxy collection publish kostiantyn_matsebora-barekube-*.tar.gz --token "$GALAXY_API_KEY"
