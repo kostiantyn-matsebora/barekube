@@ -342,7 +342,15 @@ check_playbook_rerun_changes_nothing() {
   printf '%s\n' "$out" | grep -E "^(master|agent)-[0-9]+ +:" || true
   ! printf '%s\n' "$out" | grep -E "^(master|agent)-[0-9]+ +:" | grep -qvE "changed=0 +unreachable=0 +failed=0" \
     || { log "the playbook changed something on a second run"; return 1; }
-  [[ -s "$STATE_DIR/ansible/kubeconfig" ]] || { log "the playbook saved no kubeconfig"; return 1; }
+}
+
+# The playbook adds the cluster to the kubeconfig kubectl reads, as the current
+# context, so kubectl works from the machine that ran it with no extra options.
+check_kubectl_works_with_the_saved_kubeconfig() {
+  local config="$STATE_DIR/kubeconfig"
+  [[ -s "$config" ]] || { log "the playbook saved no kubeconfig"; return 1; }
+  expect_eq "$(KUBECONFIG="$config" kubectl config current-context)" barekube-default "current context" || return 1
+  expect_eq "$(KUBECONFIG="$config" kubectl get nodes --no-headers | wc -l)" 5 "nodes seen by kubectl" || return 1
 }
 
 check_idempotent_install() {
@@ -388,6 +396,47 @@ check_agent_uninstall() {
   expect_eq "$(kc get nodes --no-headers | wc -l)" 4 "nodes after removing agent-2"
 }
 
+# Day two with the playbooks: take a node out and bring it back by running
+# site.yml again. A master also has to leave etcd.
+etcd_members() { kc get nodes -l node-role.kubernetes.io/etcd=true --no-headers | wc -l; }
+
+check_playbook_removes_and_readds_an_agent() {
+  run_playbook remove-node.yml -e barekube_node=agent-2 >"$STATE_DIR/logs/remove-agent.log" 2>&1 \
+    || { tail -40 "$STATE_DIR/logs/remove-agent.log"; return 1; }
+  expect_eq "$(kc get nodes --no-headers | wc -l)" 4 "nodes after removing agent-2" || return 1
+  ! node agent-2 test -e /usr/local/bin/k3s || { log "k3s is still installed on agent-2"; return 1; }
+  run_playbook >"$STATE_DIR/logs/readd-agent.log" 2>&1 || { tail -40 "$STATE_DIR/logs/readd-agent.log"; return 1; }
+  wait_for 120 "agent-2 is Ready again" node_ready agent-2 || return 1
+  expect_eq "$(kc get nodes --no-headers | wc -l)" 5 "nodes after adding agent-2 back"
+}
+
+check_playbook_removes_and_readds_a_master() {
+  run_playbook remove-node.yml -e barekube_node=master-3 >"$STATE_DIR/logs/remove-master.log" 2>&1 \
+    || { tail -40 "$STATE_DIR/logs/remove-master.log"; return 1; }
+  expect_eq "$(kc get nodes --no-headers | wc -l)" 4 "nodes after removing master-3" || return 1
+  wait_for 120 "master-3 has left etcd" test "$(etcd_members)" -eq 2 || return 1
+  run_playbook >"$STATE_DIR/logs/readd-master.log" 2>&1 || { tail -40 "$STATE_DIR/logs/readd-master.log"; return 1; }
+  wait_for 180 "master-3 is Ready again" node_ready master-3 || return 1
+  wait_for 120 "master-3 is in etcd again" test "$(etcd_members)" -eq 3
+}
+
+check_playbook_refuses_to_remove_the_first_master() {
+  ! run_playbook remove-node.yml -e barekube_node=master-1 >/dev/null 2>&1 || { log "the first master was removed"; return 1; }
+  node_ready master-1
+}
+
+check_playbook_uninstall_needs_confirmation_and_then_removes_k3s() {
+  ! run_playbook uninstall.yml >/dev/null 2>&1 || { log "uninstall ran without confirmation"; return 1; }
+  node_ready master-1 || { log "the cluster went down without confirmation"; return 1; }
+  run_playbook uninstall.yml -e barekube_confirm_uninstall=yes >"$STATE_DIR/logs/uninstall.log" 2>&1 \
+    || { tail -40 "$STATE_DIR/logs/uninstall.log"; return 1; }
+  for n in "${NODES[@]}"; do
+    ! node "$n" test -e /usr/local/bin/k3s || { log "k3s is still installed on $n"; return 1; }
+  done
+  ! KUBECONFIG="$STATE_DIR/kubeconfig" kubectl config get-contexts -o name | grep -qx barekube-default \
+    || { log "the cluster is still in the kubeconfig"; return 1; }
+}
+
 # --------------------------------------------------------------------- runner
 
 check "barekube is the version under test on every node" check_version
@@ -417,11 +466,18 @@ check "re-running the gVisor install keeps the cluster healthy" check_gvisor_ins
 check "re-running the Longhorn dependencies install works" check_longhorn_install_command_can_be_rerun
 check "re-running installs is idempotent" check_idempotent_install
 if [[ "$PROVISIONER" == "ansible" ]]; then
-  check "running the playbook again changes nothing and saves the kubeconfig" check_playbook_rerun_changes_nothing
+  check "kubectl works with the kubeconfig the playbook saved" check_kubectl_works_with_the_saved_kubeconfig
+  check "running the playbook again changes nothing" check_playbook_rerun_changes_nothing
+  check "the playbook refuses to remove the first master" check_playbook_refuses_to_remove_the_first_master
+  check "the playbook removes an agent and site.yml adds it back" check_playbook_removes_and_readds_an_agent
+  check "the playbook removes a master from etcd and site.yml adds it back" check_playbook_removes_and_readds_a_master
 fi
 check "the cluster survives losing a master" check_cluster_survives_losing_a_master
 check "an agent can be stopped and started" check_agent_stop_and_start
 check "an agent can be uninstalled and removed" check_agent_uninstall
+if [[ "$PROVISIONER" == "ansible" ]]; then
+  check "the uninstall playbook needs a confirmation, then removes k3s everywhere" check_playbook_uninstall_needs_confirmation_and_then_removes_k3s
+fi
 
 if ((${#FAILED[@]})); then
   log "${#FAILED[@]} check(s) failed:"

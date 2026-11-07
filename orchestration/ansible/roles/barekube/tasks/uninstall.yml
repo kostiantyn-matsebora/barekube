@@ -1,0 +1,22 @@
+---
+# Removes k3s from this node, if it is there.
+- name: Look for the k3s uninstall scripts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/bin/k3s-uninstall.sh
+    - /usr/local/bin/k3s-agent-uninstall.sh
+  register: barekube_uninstall_scripts
+
+- name: Uninstall k3s
+  ansible.builtin.command: barekube k3s uninstall --yes
+  register: barekube_result
+  changed_when: true
+  when: barekube_uninstall_scripts.results | selectattr('stat.exists') | list | length > 0
+
+- name: Take the cluster out of your kubeconfig
+  ansible.builtin.include_tasks: kubeconfig_write.yml
+  vars:
+    barekube_kubeconfig_remove: true
+  run_once: true
+  when: inventory_hostname == groups['masters'][0]

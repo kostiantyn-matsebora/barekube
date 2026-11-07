@@ -75,6 +75,19 @@ jobs:
       - name: Syntax check
         working-directory: orchestration/ansible
         run: ansible-playbook -i inventory.example.yml site.yml --syntax-check
+      - name: The release archive of the playbooks works
+        run: |
+          orchestration/package.sh "$RUNNER_TEMP/pack"
+          tar -xzf "$RUNNER_TEMP/pack/barekube-ansible.tar.gz" -C "$RUNNER_TEMP/pack"
+          cd "$RUNNER_TEMP/pack/barekube-ansible"
+          test -x play.sh
+          cp inventory.example.yml inventory.yml
+          ./play.sh --syntax-check
+      - name: The Docker wrapper works
+        working-directory: orchestration/ansible
+        env:
+          BAREKUBE_USE_DOCKER: "1"
+        run: ./play.sh -i inventory.example.yml site.yml --syntax-check
 
   # The single required status check for branch protection.
   ci-green:
