@@ -1,7 +1,7 @@
 name: barekube
 extensible: true
 help: CLI that provides functionality for installing and configuring bare kubernetes based on k3s and gVisor.
-version: 0.4.0
+version: 0.4.1
 
 x_markdown_footer: |-
       # ISSUE TRACKER

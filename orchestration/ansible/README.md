@@ -33,7 +33,7 @@ ansible-galaxy collection install kostiantyn_matsebora.barekube
 ansible-playbook -i inventory.yml kostiantyn_matsebora.barekube.site
 ```
 
-- Pin a version: `requirements.yml` with `name: kostiantyn_matsebora.barekube`, `version: "0.4.0"`
+- Pin a version: `requirements.yml` with `name: kostiantyn_matsebora.barekube`, `version: "0.4.1"`
 - Without Galaxy: `ansible-galaxy collection install kostiantyn_matsebora-barekube-<version>.tar.gz` (attached to the release)
 - Playbooks: `site`, `remove_node`, `uninstall`
 

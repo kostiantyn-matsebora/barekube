@@ -17,7 +17,7 @@ all:
 
     # Settings of the cluster. Every one has a default; see
     # roles/barekube/defaults/main.yml.
-    barekube_version: v0.4.0
+    barekube_version: v0.4.1
     barekube_longhorn: true
     barekube_gvisor_default: false
     barekube_disable: [servicelb, traefik]

@@ -94,6 +94,23 @@ jobs:
             ANSIBLE_COLLECTIONS_PATH="$RUNNER_TEMP/collections" \
               ansible-playbook -i inventory.yml "kostiantyn_matsebora.barekube.$playbook" --syntax-check
           done
+      # The check Galaxy runs when a collection is published. Without it a
+      # problem only shows up as a failed publish after the release.
+      - name: Galaxy accepts the collection
+        run: |
+          python3 -m venv "$RUNNER_TEMP/importer"
+          "$RUNNER_TEMP/importer/bin/pip" install --quiet galaxy-importer
+          cat > "$RUNNER_TEMP/galaxy-importer.cfg" <<'EOF'
+          [galaxy-importer]
+          RUN_ANSIBLE_DOC = False
+          RUN_ANSIBLE_LINT = False
+          RUN_ANSIBLE_TEST = False
+          RUN_FLAKE8 = False
+          LOCAL_IMAGE_DOCKER = False
+          REQUIRE_V1_OR_GREATER = False
+          EOF
+          GALAXY_IMPORTER_CONFIG="$RUNNER_TEMP/galaxy-importer.cfg" \
+            "$RUNNER_TEMP/importer/bin/python" -m galaxy_importer.main "$RUNNER_TEMP"/collection/kostiantyn_matsebora-barekube-*.tar.gz
       - name: The Docker wrapper works
         working-directory: orchestration/ansible
         env:

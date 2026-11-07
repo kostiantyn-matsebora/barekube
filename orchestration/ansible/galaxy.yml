@@ -3,7 +3,7 @@ namespace: kostiantyn_matsebora
 name: barekube
 # The release version, without the v. The release workflow checks it matches
 # the tag.
-version: 0.4.0
+version: 0.4.1
 readme: README.md
 authors:
   - Kostiantyn Matsebora
