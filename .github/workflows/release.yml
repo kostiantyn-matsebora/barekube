@@ -88,7 +88,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
-
       - name: Run the installation and verification instructions
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: cli/tests/readme_install.sh release "$GITHUB_REF_NAME"
