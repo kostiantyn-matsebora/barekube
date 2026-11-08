@@ -500,7 +500,14 @@ check_update_adds_a_tls_san() {
 check_update_turns_a_component_back_on() {
   inventory_set barekube_disable "[servicelb]"
   run_playbook_logged update-enable || return 1
-  wait_for 300 "traefik is back" deployment_exists traefik || return 1
+  if ! wait_for 300 "traefik is back" deployment_exists traefik; then
+    log "traefik did not come back; what k3s has on master-1:"
+    node master-1 ls -la /var/lib/rancher/k3s/server/manifests || true
+    kc get addon -A || true
+    kc -n kube-system get helmchart,job,deploy || true
+    node master-1 cat /etc/systemd/system/k3s.service || true
+    return 1
+  fi
   wait_for 300 "every node is Ready" all_nodes_are_ready
 }
 
