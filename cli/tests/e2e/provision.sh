@@ -94,6 +94,29 @@ if uses_playbooks; then
     echo "    ansible_user: ubuntu"
     echo "    ansible_become: true"
     echo "    ansible_ssh_common_args: -o StrictHostKeyChecking=accept-new"
+    if [[ "$INVENTORY_KIND" == "full" ]]; then
+      # Every setting, optional ones included. Most are at their defaults on
+      # purpose: setting one explicitly must not change what it does.
+      version="$(sed -n 's/^barekube_version: *//p' "$ROOT/orchestration/ansible/roles/barekube/defaults/main.yml")"
+      cat <<YAML
+    barekube_version: $version
+    barekube_longhorn: true
+    barekube_gvisor_default: $GVISOR_DEFAULT
+    barekube_disable: [servicelb, traefik]
+    barekube_tls_san: ["$FIRST_IP"]
+    barekube_join_endpoint: https://$FIRST_IP:6443
+    barekube_extra_args: ""
+    barekube_cluster_name: e2e
+    barekube_kubeconfig: $HOME/.kube/config
+    barekube_verify_signature: false
+    barekube_cli_path: $(cli_path_for_playbook)
+    barekube_ready_timeout: 300
+    barekube_drain_timeout: 300
+    barekube_install_attempts: 4
+    barekube_install_retry_delay: 10
+    barekube_show_output: true
+YAML
+    fi
   } >"$STATE_DIR/inventory.yml"
   cat "$STATE_DIR/inventory.yml"
   run_playbook

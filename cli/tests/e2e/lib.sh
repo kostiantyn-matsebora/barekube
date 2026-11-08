@@ -21,6 +21,12 @@ GVISOR_DEFAULT="${E2E_GVISOR_DEFAULT:-false}"
 GVISOR_FLAGS=()
 [[ "$GVISOR_DEFAULT" == "true" ]] && GVISOR_FLAGS=(--gvisor-default)
 
+# What the Ansible inventory defines (only the Ansible provisioners read it):
+# "minimal" has the hosts and the connection and no barekube_* setting at all,
+# so every default applies (nothing is disabled, gVisor is not the default);
+# "full" defines every setting, optional ones included.
+INVENTORY_KIND="${E2E_INVENTORY:-full}"
+
 # Disabled on purpose, as in the README examples: the test cluster has no
 # service load balancer or ingress; those belong to the layer above barekube.
 K3S_FLAGS=(--disable servicelb --disable traefik)
@@ -29,6 +35,18 @@ K3S_FLAGS=(--disable servicelb --disable traefik)
 # ways a user gets them: "ansible" is the release archive run with play.sh in
 # Docker, "galaxy" is the Ansible collection run with ansible-playbook.
 uses_playbooks() { [[ "$PROVISIONER" == "ansible" || "$PROVISIONER" == "galaxy" ]]; }
+
+# Whether servicelb and traefik are turned off in this cluster.
+components_disabled() { ! { uses_playbooks && [[ "$INVENTORY_KIND" == "minimal" ]]; }; }
+
+# The kubeconfig context the playbook creates: barekube-<barekube_cluster_name>.
+KUBE_CONTEXT=barekube-default
+if uses_playbooks && [[ "$INVENTORY_KIND" == "full" ]]; then KUBE_CONTEXT=barekube-e2e; fi
+
+# Where the CLI of this checkout is, as the playbook sees it.
+cli_path_for_playbook() {
+  if [[ "$PROVISIONER" == "galaxy" ]]; then echo "$ROOT/cli/release/barekube"; else echo /ansible/barekube; fi
+}
 
 # Laid out as in the README: inventory.yml in the current directory (STATE_DIR),
 # the extracted archive or the installed collections next to it. The CLI of this
@@ -41,21 +59,24 @@ PLAYBOOK_DIR="$STATE_DIR/barekube-ansible"
 run_playbook() {
   local playbook="${1:-site.yml}"
   shift || true
-  local settings=(
-    -e barekube_verify_signature=false
-    -e barekube_show_output=true
-    -e "barekube_gvisor_default=$GVISOR_DEFAULT"
-    -e '{"barekube_disable": ["servicelb", "traefik"]}'
-  )
+  # Only what the test machines need goes on the command line (no signing
+  # on a CI build, the local CLI); the settings under test are in the
+  # inventory. A full inventory carries these too.
+  local settings=()
+  if [[ "$INVENTORY_KIND" == "minimal" ]]; then
+    settings=(
+      -e barekube_verify_signature=false
+      -e barekube_show_output=true
+      -e "barekube_cli_path=$(cli_path_for_playbook)"
+    )
+  fi
   (
     cd "$STATE_DIR"
     if [[ "$PROVISIONER" == "galaxy" ]]; then
       ANSIBLE_COLLECTIONS_PATH="$STATE_DIR/collections" ansible-playbook -i inventory.yml \
-        "kostiantyn_matsebora.barekube.${playbook%.yml}" "$@" "${settings[@]}" \
-        -e "barekube_cli_path=$ROOT/cli/release/barekube"
+        "kostiantyn_matsebora.barekube.${playbook%.yml}" "$@" "${settings[@]}"
     else
-      BAREKUBE_USE_DOCKER=1 "$PLAYBOOK_DIR/play.sh" "$playbook" "$@" "${settings[@]}" \
-        -e barekube_cli_path=/ansible/barekube
+      BAREKUBE_USE_DOCKER=1 "$PLAYBOOK_DIR/play.sh" "$playbook" "$@" "${settings[@]}"
     fi
   )
 }

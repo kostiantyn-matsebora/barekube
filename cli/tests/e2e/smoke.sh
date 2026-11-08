@@ -70,6 +70,12 @@ check_disabled_components_are_absent() {
   [[ "$daemonsets" != *svclb* ]] || { log "servicelb is installed"; return 1; }
 }
 
+# A minimal inventory disables nothing, so k3s brings its own ingress and
+# service load balancer.
+check_default_components_are_present() {
+  kc -n kube-system rollout status deploy/traefik --timeout=180s
+}
+
 check_system_workloads_are_healthy() {
   kc -n kube-system rollout status deploy/coredns --timeout=180s
   kc -n kube-system rollout status deploy/metrics-server --timeout=180s
@@ -348,7 +354,7 @@ check_playbook_rerun_changes_nothing() {
 # kubectl works from the machine that ran it with no extra options.
 check_kubectl_works_with_the_saved_kubeconfig() {
   [[ -s ~/.kube/config ]] || { log "the playbook saved no kubeconfig"; return 1; }
-  expect_eq "$(kubectl config current-context)" barekube-default "current context" || return 1
+  expect_eq "$(kubectl config current-context)" "$KUBE_CONTEXT" "current context" || return 1
   expect_eq "$(kubectl get nodes --no-headers | wc -l)" 5 "nodes seen by kubectl" || return 1
 }
 
@@ -432,7 +438,7 @@ check_playbook_uninstall_needs_confirmation_and_then_removes_k3s() {
   for n in "${NODES[@]}"; do
     ! node "$n" test -e /usr/local/bin/k3s || { log "k3s is still installed on $n"; return 1; }
   done
-  ! kubectl config get-contexts -o name | grep -qx barekube-default \
+  ! kubectl config get-contexts -o name | grep -qx "$KUBE_CONTEXT" \
     || { log "the cluster is still in the kubeconfig"; return 1; }
 }
 
@@ -441,7 +447,11 @@ check_playbook_uninstall_needs_confirmation_and_then_removes_k3s() {
 check "barekube is the version under test on every node" check_version
 check "all five nodes are Ready" check_nodes_ready
 check "the control plane is highly available (3 masters, 3 etcd members)" check_control_plane_is_highly_available
-check "disabled components are not installed" check_disabled_components_are_absent
+if components_disabled; then
+  check "disabled components are not installed" check_disabled_components_are_absent
+else
+  check "components left on by the defaults are installed" check_default_components_are_present
+fi
 check "system workloads are healthy" check_system_workloads_are_healthy
 check "every node holds a WireGuard mesh with the other four" check_wireguard_mesh
 group "Deploy the echo workload"
