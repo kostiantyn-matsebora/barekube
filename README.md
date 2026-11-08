@@ -44,6 +44,9 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
      vars:
        ansible_user: ubuntu
        ansible_become: true
+
+       barekube_disable: [servicelb, traefik]   # k3s components to turn off (default: [])
+       barekube_tls_san: []                     # extra API server certificate names (default: [])
    ```
 
 3. Build the cluster, one of two ways (log in with a password instead of a key: add `-k`):
