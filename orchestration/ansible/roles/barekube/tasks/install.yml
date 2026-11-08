@@ -1,0 +1,35 @@
+---
+# Runs one barekube install command, retrying when it fails (the k3s download
+# can drop). Waits barekube_install_retry_delay seconds after the first failure
+# and doubles the wait after each next one, up to barekube_install_attempts
+# tries in all.
+#   barekube_install_argv: the command
+#   barekube_install_env: its environment
+#   barekube_install_attempt: which try this is (set by this file)
+- name: Run the install command
+  block:
+    - name: Run the install command
+      ansible.builtin.command:
+        argv: "{{ barekube_install_argv }}"
+      environment: "{{ barekube_install_env | default({}) }}"
+      register: barekube_result
+      changed_when: (barekube_result.stdout | trim | split('\n') | last | trim) == 'installed'
+      no_log: "{{ not (barekube_show_output | bool) }}"
+  rescue:
+    - name: Give up after the last attempt
+      ansible.builtin.fail:
+        msg: >-
+          The install failed {{ barekube_install_attempt | default(1) }} time(s).
+          Set barekube_show_output to see why.
+      when: (barekube_install_attempt | default(1) | int) >= (barekube_install_attempts | int)
+
+    - name: Wait before trying again
+      ansible.builtin.wait_for:
+        timeout: "{{ (barekube_install_retry_delay | int) * (2 ** ((barekube_install_attempt | default(1) | int) - 1)) }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Try again
+      ansible.builtin.include_tasks: install.yml
+      vars:
+        barekube_install_attempt: "{{ (barekube_install_attempt | default(1) | int) + 1 }}"

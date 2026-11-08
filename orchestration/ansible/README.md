@@ -58,12 +58,16 @@ all:
   vars:
     ansible_user: ubuntu
     ansible_become: true
+
+    barekube_disable: [servicelb, traefik]   # k3s components to turn off (default: [])
+    barekube_tls_san: []                     # extra API server certificate names (default: [])
 ```
 
 - Hosts are IP addresses or names. For a name that does not resolve, add `ansible_host: <IP>`
 - `-e barekube_node=` takes the name as written in the inventory
 - Keep an odd number of masters
 - Full template: [inventory.example.yml](inventory.example.yml)
+- Every option: [INVENTORY.md](INVENTORY.md)
 
 ## Settings
 
@@ -80,6 +84,10 @@ All optional, set in the inventory.
 | `barekube_extra_args` | empty | extra k3s server arguments |
 | `barekube_kubeconfig` | `~/.kube/config` | where the cluster is added, as context `barekube-default` |
 | `barekube_cluster_name` | `default` | context name: `barekube-<name>` |
+| `barekube_install_attempts` | `4` | tries per install command; the wait doubles after each failure |
+| `barekube_install_retry_delay` | `10` | seconds to wait after the first failure |
+
+More settings, with types: [INVENTORY.md](INVENTORY.md).
 
 ## Logging in
 

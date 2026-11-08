@@ -1,5 +1,7 @@
 # The inventory is the description of your cluster: which machines, and which
 # of them are masters. The first host under `masters` becomes the initial master.
+# Every setting is listed in INVENTORY.md; the ones below are shown with their
+# defaults unless a comment says otherwise. Uncomment to change.
 all:
   children:
     masters:                  # the first one is the initial master
@@ -7,19 +9,42 @@ all:
         192.168.1.10:         # an IP address or a host name
         192.168.1.15:
         192.168.1.5:
+          # Per host: the address the other nodes reach this one on, if it
+          # differs from ansible_host (default: ansible_host, else the name).
+          # barekube_address: 10.0.0.5
     agents:
       hosts:
         192.168.1.50:
         192.168.1.30:
   vars:
+    # --- Connection (plain Ansible) -------------------------------------
     ansible_user: ubuntu
     ansible_become: true
+    # ansible_port: 22
+    # ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 
-    # Settings of the cluster. Every one has a default; see
-    # roles/barekube/defaults/main.yml.
-    barekube_version: v0.4.1
-    barekube_longhorn: true
-    barekube_gvisor_default: false
-    barekube_disable: [servicelb, traefik]
-    # barekube_tls_san: [k8s.home.lan]
-    # barekube_join_endpoint: https://k8s.home.lan:6443
+    # --- The cluster ------------------------------------------------------
+    barekube_version: v0.4.1            # the barekube release to install
+    barekube_longhorn: true             # Longhorn packages on every node
+    barekube_gvisor_default: false      # gVisor as the default RuntimeClass
+    barekube_disable: [servicelb, traefik]   # k3s components to turn off (default: [])
+    barekube_tls_san: []                # extra API server certificate names, e.g. [k8s.home.lan]
+    # barekube_join_endpoint: https://k8s.home.lan:6443   # default: first master, port 6443
+    # barekube_extra_args: ""           # extra k3s server arguments
+    # barekube_cluster_name: default    # kubeconfig context: barekube-<name>
+    # barekube_kubeconfig: ~/.kube/config
+
+    # --- The barekube CLI -------------------------------------------------
+    # barekube_verify_signature: true   # check the Sigstore signature (needs cosign)
+    # barekube_cli_path: ""             # install this local file instead of a release
+    # barekube_release_url: https://github.com/kostiantyn-matsebora/barekube/releases/download/v0.4.1
+    # barekube_signer_identity: <regex of the release workflow>   # see INVENTORY.md
+
+    # --- Timing and retries -----------------------------------------------
+    # barekube_ready_timeout: 300       # seconds to wait for a node to be Ready
+    # barekube_drain_timeout: 300       # seconds to wait for pods to leave a removed node
+    # barekube_install_attempts: 4      # tries per install command
+    # barekube_install_retry_delay: 10  # seconds before the 2nd try; doubles after each
+
+    # --- Output -----------------------------------------------------------
+    # barekube_show_output: false       # show join command output (it contains the join token)
