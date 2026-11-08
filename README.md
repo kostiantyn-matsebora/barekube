@@ -44,6 +44,9 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
      vars:
        ansible_user: ubuntu
        ansible_become: true
+
+       barekube_disable: [servicelb, traefik]   # k3s components to turn off (default: [])
+       barekube_tls_san: []                     # extra API server certificate names (default: [])
    ```
 
 3. Build the cluster, one of two ways (log in with a password instead of a key: add `-k`):
@@ -52,7 +55,8 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
 
      ```shell
      curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
-     ./barekube-ansible/play.sh
+     ./barekube-ansible/play.sh                                   # uses ./inventory.yml
+     ./barekube-ansible/play.sh -i ~/clusters/home/inventory.yml  # inventory anywhere
      ```
 
    - Ansible collection from [Galaxy](https://galaxy.ansible.com/ui/repo/published/kostiantyn_matsebora/barekube/), with Ansible:
@@ -68,11 +72,18 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
    kubectl get nodes
    ```
 
-Add machines or change settings: run step 3 again. [More](orchestration/ansible/README.md). One node by hand: [use the CLI](#installing-the-cli).
+Add machines or change settings: run step 3 again. [More](orchestration/ansible/README.md). One node by hand: [use the CLI on each node](#using-the-cli).
 
-## Installing the CLI
+## Using the CLI
 
-To install barekube CLI you simply must do the following steps:
+> [!IMPORTANT]
+> The CLI works on **one node at a time**: install it and run it **on each machine of the cluster** (over SSH), not on your own computer. To build a whole cluster from your computer, use the [Ansible playbooks](#quick-start-build-a-cluster), which install and run the CLI on every node for you.
+
+### Installation
+
+Do this on each node.
+
+To install the barekube CLI, do the following:
 
 - Download the latest release into the destination directory, for instance `$HOME/bin`:
 
@@ -94,7 +105,7 @@ To install barekube CLI you simply must do the following steps:
   source $HOME/.bashrc
   ```
 
-### Verifying the download
+#### Verifying the download
 
 Releases are signed. To check yours before running it, use the [GitHub CLI](https://cli.github.com):
 
@@ -123,9 +134,9 @@ rm SHA256SUMS barekube.sigstore.json
 
 `barekube upgrade` checks new releases itself.
 
-## Using the CLI
+### Usage
 
-After installation, you can use barekube CLI by running `barekube --help` command in your terminal. It will show you a help message with available commands:
+Once installed, you can use barekube CLI by running `barekube --help` command in your terminal. It will show you a help message with available commands:
 
 ```shell
 barekube - CLI that provides functionality for installing and configuring bare kubernetes based on k3s and gVisor.
@@ -164,7 +175,7 @@ MIT License: https://github.com/kostiantyn-matsebora/barekube/blob/master/LICENS
 Copyright (c) 2025 Kostiantyn Matsebora
 ```
 
-## Running from scripts
+### Running from scripts
 
 ```shell
 export K3S_TOKEN='<token from the first master>'   # not a flag: stays out of ps and history
@@ -173,7 +184,7 @@ barekube install master-node --yes --server https://192.168.1.10:6443
 barekube install agent-node  --yes --server https://192.168.1.10:6443
 ```
 
-`--yes` skips the questions. Each command ends with `installed` or `already installed`.
+`--yes` skips the questions. Each command ends with `installed`, `updated` or `already installed`. Run again on an installed server with changed `--tls-san`, `--disable` or `--extra-args`, and k3s is reconfigured and restarted (`updated`); with the same ones, nothing happens.
 
 ## gVisor as the default
 

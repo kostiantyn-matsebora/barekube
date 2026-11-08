@@ -125,6 +125,7 @@ commands:
   examples:
   - barekube install dependencies
   - barekube install initial-master --reinstall
+  - barekube install master-node --server https://10.0.0.1:6443 --disable traefik   # on an installed node: applies changed arguments
   - barekube install master-node
   - barekube install agent-node --reinstall
 

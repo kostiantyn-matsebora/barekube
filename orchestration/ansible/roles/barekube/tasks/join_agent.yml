@@ -3,13 +3,11 @@
   ansible.builtin.include_tasks: token.yml
 
 - name: Join the cluster as an agent
-  ansible.builtin.command:
-    argv: ['barekube', 'install', 'agent-node', '--yes', '--server', "{{ barekube_join_endpoint }}"]
-  environment:
-    K3S_TOKEN: "{{ barekube_token.content | b64decode | trim }}"
-  register: barekube_result
-  changed_when: (barekube_result.stdout | trim | split('\n') | last | trim) == 'installed'
-  no_log: "{{ not (barekube_show_output | bool) }}"
+  ansible.builtin.include_tasks: install.yml
+  vars:
+    barekube_install_argv: ['barekube', 'install', 'agent-node', '--yes', '--server', "{{ barekube_join_endpoint }}"]
+    barekube_install_env:
+      K3S_TOKEN: "{{ barekube_token.content | b64decode | trim }}"
 
 - name: Wait for the node
   ansible.builtin.include_tasks: wait_ready.yml

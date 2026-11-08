@@ -520,6 +520,7 @@ barekube_system_usage() {
     printf "%s\n" "$(bold "Examples:")"
     printf "  barekube install dependencies\n"
     printf "  barekube install initial-master --reinstall\n"
+    printf "  barekube install master-node --server https://10.0.0.1:6443 --disable traefik\n"
     printf "  barekube install master-node\n"
     printf "  barekube install agent-node --reinstall\n"
     echo
@@ -981,6 +982,10 @@ k3s_service_name() {
     fi
 }
 
+# Where the k3s server arguments of the last install are remembered, so a
+# repeated install can tell whether the requested ones changed.
+K3S_ARGS_FILE="/etc/barekube/k3s-args"
+
 # Set by the install commands from the repeatable --tls-san and --disable flags.
 TLS_SANS=()
 DISABLE_COMPONENTS=()
@@ -996,6 +1001,30 @@ check_k3s_installed() {
             exit 0
         fi
     fi
+}
+
+# Collapses runs of whitespace so equal arguments compare equal.
+normalize_args() {
+    local -a WORDS
+    read -ra WORDS <<<"$1"
+    echo "${WORDS[*]}"
+}
+
+# Whether k3s is installed here and the server arguments asked for differ from
+# the ones it was installed with. Nodes installed before the arguments were
+# remembered count as different, once. Usage: k3s_args_changed ARGS
+k3s_args_changed() {
+    local WANTED
+    WANTED="$(normalize_args "$1")"
+    [[ -f "$K3S_ARGS_FILE" ]] && [[ "$(normalize_args "$(cat "$K3S_ARGS_FILE")")" == "$WANTED" ]] && return 1
+    return 0
+}
+
+# Usage: save_k3s_args ARGS
+save_k3s_args() {
+    sudo mkdir -p "$(dirname "$K3S_ARGS_FILE")"
+    normalize_args "$1" | sudo tee "$K3S_ARGS_FILE" >/dev/null
+    exit_if_error "Failed to remember the k3s arguments"
 }
 
 # Builds the extra k3s server arguments. Values given as flags are used as is
@@ -1353,13 +1382,29 @@ barekube_install_initial_master_command() {
 
   # ./commands/install/initial-master.sh
   # shellcheck disable=SC2154
-  check_k3s_installed "${args[--reinstall]}"
   eval "TLS_SANS=(${args[--tls-san]:-})"
   eval "DISABLE_COMPONENTS=(${args[--disable]:-})"
+  # On an installed node, changed server arguments are applied by running the
+  # installer again; with none given, or the same ones, there is nothing to do.
+  UPDATING=""
+  if [[ -z "${args[--reinstall]:-}" ]] && check_if_command_exists k3s \
+      && { ((${#DISABLE_COMPONENTS[@]} + ${#TLS_SANS[@]})) || [[ -n "${args[--extra-args]:-}" ]]; }
+  then
+      ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
+      k3s_args_changed "$ADDITIONAL_ARGS" && UPDATING=1
+  fi
+  [[ -n "$UPDATING" ]] || check_k3s_installed "${args[--reinstall]}"
   echo_info "Installing initial k3s master node..."
-  ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
+  [[ -n "$UPDATING" ]] || ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
 
   install_k3s_initial_master "${ADDITIONAL_ARGS}"
+  save_k3s_args "${ADDITIONAL_ARGS}"
+  if [[ -n "$UPDATING" ]]
+  then
+      echo_final "Failed to update initial k3s master node." "Initial k3s master node updated successfully."
+      report_state "updated"
+      exit 0
+  fi
   setup_gvisor "${args[--gvisor-default]:+on}"
   show_k3s_token
   echo_final "Failed to install initial k3s master node." "Initial k3s master node installed successfully."
@@ -1372,19 +1417,35 @@ barekube_install_master_node_command() {
 
   # ./commands/install/master-node.sh
   # shellcheck disable=SC2154
-  check_k3s_installed "${args[--reinstall]}"
+  eval "TLS_SANS=(${args[--tls-san]:-})"
+  eval "DISABLE_COMPONENTS=(${args[--disable]:-})"
+  # On an installed node, changed server arguments are applied by running the
+  # installer again; with none given, or the same ones, there is nothing to do.
+  UPDATING=""
+  if [[ -z "${args[--reinstall]:-}" ]] && check_if_command_exists k3s \
+      && { ((${#DISABLE_COMPONENTS[@]} + ${#TLS_SANS[@]})) || [[ -n "${args[--extra-args]:-}" ]]; }
+  then
+      ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
+      k3s_args_changed "$ADDITIONAL_ARGS" && UPDATING=1
+  fi
+  [[ -n "$UPDATING" ]] || check_k3s_installed "${args[--reinstall]}"
   SERVER_URL=$(resolve_server_url "${args[--server]:-}" "${args[--yes]:+--yes}") || exit 1
   K3S_TOKEN=$(resolve_token "${args[--yes]:+--yes}") || exit 1
   export K3S_TOKEN
-  eval "TLS_SANS=(${args[--tls-san]:-})"
-  eval "DISABLE_COMPONENTS=(${args[--disable]:-})"
-  ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
+  [[ -n "$UPDATING" ]] || ADDITIONAL_ARGS=$(gather_additional_args "${args[--yes]:+--yes}" "${args[--extra-args]:-}")
   echo_info "Installing master node..."
 
   echo_info "Joining cluster at: $SERVER_URL"
   echo_info "Additional arguments: $ADDITIONAL_ARGS"
 
   install_k3s_master "$SERVER_URL" "$ADDITIONAL_ARGS"
+  save_k3s_args "$ADDITIONAL_ARGS"
+  if [[ -n "$UPDATING" ]]
+  then
+      echo_final "Failed to update k3s master node." "k3s master node updated successfully."
+      report_state "updated"
+      exit 0
+  fi
   setup_gvisor "${args[--gvisor-default]:+on}"
   echo_final "Failed to install k3s master node." "Another k3s master node installed successfully."
   report_state "installed"

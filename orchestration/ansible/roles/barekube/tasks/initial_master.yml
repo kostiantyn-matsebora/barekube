@@ -1,9 +1,9 @@
 ---
 - name: Install the initial master
-  ansible.builtin.command:
-    argv: "{{ ['barekube', 'install', 'initial-master', '--yes'] + barekube_server_flags }}"
-  register: barekube_result
-  changed_when: (barekube_result.stdout | trim | split('\n') | last | trim) == 'installed'
+  ansible.builtin.include_tasks: install.yml
+  vars:
+    barekube_install_argv: "{{ ['barekube', 'install', 'initial-master', '--yes'] + barekube_server_flags }}"
+    barekube_install_env: {}
 
 - name: Wait for the node
   ansible.builtin.include_tasks: wait_ready.yml

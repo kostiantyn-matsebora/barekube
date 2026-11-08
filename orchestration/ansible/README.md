@@ -60,12 +60,16 @@ all:
   vars:
     ansible_user: ubuntu
     ansible_become: true
+
+    barekube_disable: [servicelb, traefik]   # k3s components to turn off (default: [])
+    barekube_tls_san: []                     # extra API server certificate names (default: [])
 ```
 
 - Hosts are IP addresses or names. For a name that does not resolve, add `ansible_host: <IP>`
 - `-e barekube_node=` takes the name as written in the inventory
 - Keep an odd number of masters
 - Full template: [inventory.example.yml](inventory.example.yml)
+- Every option: [INVENTORY.md](INVENTORY.md)
 
 ## Settings
 
@@ -82,6 +86,10 @@ All optional, set in the inventory.
 | `barekube_extra_args` | empty | extra k3s server arguments |
 | `barekube_kubeconfig` | `~/.kube/config` | where the cluster is added, as context `barekube-default` |
 | `barekube_cluster_name` | `default` | context name: `barekube-<name>` |
+| `barekube_install_attempts` | `4` | tries per install command; the wait doubles after each failure |
+| `barekube_install_retry_delay` | `10` | seconds to wait after the first failure |
+
+More settings, with types: [INVENTORY.md](INVENTORY.md).
 
 ## Logging in
 
@@ -103,6 +111,13 @@ Password login without Docker needs [`sshpass`](https://sshpass.sourceforge.net/
 Uses Ansible if installed, else Docker (`BAREKUBE_USE_DOCKER=1` forces Docker).
 
 ## Change a running cluster
+
+The inventory is the desired state: edit it and run `./play.sh` again. The cluster follows, and only what differs changes.
+
+- Add or remove nodes: add the host to `masters` or `agents` and run the playbook. To remove one, run `remove_node` first, then delete the host
+- Change `barekube_disable`, `barekube_tls_san` or `barekube_extra_args`: the servers are reconfigured and restarted one at a time
+- Change `barekube_gvisor_default`: applied from a master, no restart
+- Turning a component that ran before back on is not reliable in k3s and may need manual steps: [INVENTORY.md](INVENTORY.md#changing-a-running-cluster)
 
 ```shell
 ./play.sh                                                  # add a node: put it in the inventory first

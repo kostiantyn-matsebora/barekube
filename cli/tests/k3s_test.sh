@@ -37,6 +37,41 @@ test_check_k3s_installed_continues_when_reinstall_requested() {
   assert_output_contains "continued"
 }
 
+# ------------------------------------------------- remembering the arguments
+
+test_normalize_args_collapses_whitespace() {
+  run normalize_args "  --disable=traefik   --tls-san  a "
+  assert_eq "--disable=traefik --tls-san a" "$output"
+}
+
+test_k3s_args_changed_is_true_when_nothing_was_remembered() {
+  K3S_ARGS_FILE="$TEST_TMP/none"
+  run k3s_args_changed "--disable=traefik"
+  assert_status 0
+}
+
+test_k3s_args_changed_is_false_for_the_same_arguments() {
+  K3S_ARGS_FILE="$TEST_TMP/args"
+  echo "--disable=traefik --tls-san a" >"$K3S_ARGS_FILE"
+  run k3s_args_changed "  --disable=traefik   --tls-san a"
+  assert_status 1
+}
+
+test_k3s_args_changed_is_true_for_other_arguments() {
+  K3S_ARGS_FILE="$TEST_TMP/args"
+  echo "--disable=traefik" >"$K3S_ARGS_FILE"
+  run k3s_args_changed "--disable=traefik --disable=servicelb"
+  assert_status 0
+}
+
+test_save_k3s_args_writes_the_normalized_arguments() {
+  K3S_ARGS_FILE="$TEST_TMP/etc/args"
+  sudo() { "$@"; }
+  run save_k3s_args " --disable=traefik   --tls-san a"
+  assert_status 0
+  assert_eq "--disable=traefik --tls-san a" "$(cat "$K3S_ARGS_FILE")"
+}
+
 # ------------------------------------------------------- gathering parameters
 
 test_gather_additional_args_returns_nothing_when_declined() {

@@ -33,13 +33,15 @@ barekube_disable: []
 # Anything else to pass to the k3s server.
 barekube_extra_args: ""
 
-# The flags every server install gets, built from the settings above.
+# The flags every server install gets, built from the settings above. The extra
+# arguments are joined to the flag with '=': the CLI would take a separate value
+# that starts with '--' for a flag of its own.
 barekube_endpoint_host: "{{ barekube_join_endpoint | regex_replace('^https?://([^:/]+).*$', '\\1') }}"
 barekube_server_sans: "{{ ([barekube_endpoint_host, barekube_address] + barekube_tls_san) | unique }}"
 barekube_server_flags: >-
   {{ (['--tls-san'] | product(barekube_server_sans) | map('list') | flatten)
   + (['--disable'] | product(barekube_disable) | map('list') | flatten)
-  + (['--extra-args', barekube_extra_args] if barekube_extra_args | length > 0 else []) }}
+  + (['--extra-args=' ~ barekube_extra_args] if barekube_extra_args | length > 0 else []) }}
 
 # --- On this machine --------------------------------------------------------
 # The kubeconfig the cluster is added to, which kubectl reads by default. The
@@ -53,6 +55,12 @@ barekube_drain_timeout: 300
 
 # How long to wait for a node to become Ready, in seconds.
 barekube_ready_timeout: 300
+
+# The install commands download k3s, which can fail on a bad connection. They
+# are tried up to this many times in all, waiting this many seconds after the
+# first failure and twice as long after each next one (10, 20, 40, ...).
+barekube_install_attempts: 4
+barekube_install_retry_delay: 10
 
 # Show the output of the join commands. They are hidden by default because the
 # join token is in their environment, which verbose Ansible output can print.
