@@ -7,6 +7,14 @@ on:
   schedule:
     - cron: "23 3 * * *"
   workflow_dispatch:
+    inputs:
+      only:
+        description: >-
+          Run only the cluster jobs whose label matches this regular expression,
+          e.g. "ansible.*full" or "galaxy". The label is
+          "<provisioner> gvisor=<true|false> <inventory>". Empty runs all.
+        required: false
+        default: ""
   workflow_call:
 
 permissions:
@@ -17,8 +25,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The matrix, optionally narrowed with the "only" input of a manual run, so a
+  # fix can be tried on just the jobs that failed.
+  matrix:
+    name: Choose the cluster jobs
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.pick.outputs.include }}
+    steps:
+      - id: pick
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          all='[
+            {"provisioner":"script","gvisor_default":false},
+            {"provisioner":"script","gvisor_default":true},
+            {"provisioner":"ansible","gvisor_default":false,"inventory":"minimal"},
+            {"provisioner":"ansible","gvisor_default":false,"inventory":"full"},
+            {"provisioner":"ansible","gvisor_default":true,"inventory":"full"},
+            {"provisioner":"galaxy","gvisor_default":false,"inventory":"minimal"},
+            {"provisioner":"galaxy","gvisor_default":false,"inventory":"full"}
+          ]'
+          picked="$(jq -c --arg only "$ONLY" '
+            map(select(("\(.provisioner) gvisor=\(.gvisor_default) \(.inventory // "")") | test($only)))' <<<"$all")"
+          [[ "$picked" != "[]" ]] || { echo "::error::nothing matches '$ONLY'"; exit 1; }
+          echo "include=$picked" >>"$GITHUB_OUTPUT"
+
   cluster:
     name: Five-node cluster (${{ matrix.provisioner }}, gVisor default ${{ matrix.gvisor_default }}${{ matrix.inventory && format(', {0} inventory', matrix.inventory) || '' }})
+    needs: matrix
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -26,20 +61,13 @@ jobs:
       matrix:
         # The cluster is built by the barekube commands run one node at a time
         # ("script"), by the Ansible playbooks from the release archive
-        # ("ansible", through play.sh in Docker), with and without gVisor as
-        # the default for pods, and by the Ansible collection ("galaxy",
-        # built from the commit and run with ansible-playbook). The Ansible
-        # ones run with an inventory that has only the required settings
-        # ("minimal": every default applies) and with one that defines every
-        # setting, optional ones included ("full").
-        include:
-          - { provisioner: script, gvisor_default: false }
-          - { provisioner: script, gvisor_default: true }
-          - { provisioner: ansible, gvisor_default: false, inventory: minimal }
-          - { provisioner: ansible, gvisor_default: false, inventory: full }
-          - { provisioner: ansible, gvisor_default: true, inventory: full }
-          - { provisioner: galaxy, gvisor_default: false, inventory: minimal }
-          - { provisioner: galaxy, gvisor_default: false, inventory: full }
+        # ("ansible", through play.sh in Docker) and by the Ansible collection
+        # ("galaxy", built from the commit and run with ansible-playbook), with
+        # and without gVisor as the default for pods. The Ansible ones run with
+        # an inventory that has only the required settings ("minimal": every
+        # default applies) and with one that defines every setting, optional
+        # ones included ("full"). The list is in the job above.
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
     env:
       E2E_PROVISIONER: ${{ matrix.provisioner }}
       E2E_GVISOR_DEFAULT: ${{ matrix.gvisor_default }}

@@ -97,6 +97,9 @@ if uses_playbooks; then
     if [[ "$INVENTORY_KIND" == "full" ]]; then
       # Every setting, optional ones included. Most are at their defaults on
       # purpose: setting one explicitly must not change what it does.
+      # play.sh in Docker keeps the user's ~/.kube at /home/barekube/.kube.
+      kubeconfig="$HOME/.kube/config"
+      [[ "$PROVISIONER" == "ansible" ]] && kubeconfig=/home/barekube/.kube/config
       version="$(sed -n 's/^barekube_version: *//p' "$ROOT/orchestration/ansible/roles/barekube/defaults/main.yml")"
       cat <<YAML
     barekube_version: $version
@@ -107,7 +110,7 @@ if uses_playbooks; then
     barekube_join_endpoint: https://$FIRST_IP:6443
     barekube_extra_args: ""
     barekube_cluster_name: e2e
-    barekube_kubeconfig: $HOME/.kube/config
+    barekube_kubeconfig: $kubeconfig
     barekube_verify_signature: false
     barekube_cli_path: $(cli_path_for_playbook)
     barekube_ready_timeout: 300
