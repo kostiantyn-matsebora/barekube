@@ -115,6 +115,7 @@ The inventory is the desired state: edit it and run `./play.sh` again. The clust
 - Add or remove nodes: add the host to `masters` or `agents` and run the playbook. To remove one, run `remove_node` first, then delete the host
 - Change `barekube_disable`, `barekube_tls_san` or `barekube_extra_args`: the servers are reconfigured and restarted one at a time
 - Change `barekube_gvisor_default`: applied from a master, no restart
+- Turning a disabled component back on also needs `kubectl -n kube-system delete addon traefik` (k3s keeps its record of it). See [INVENTORY.md](INVENTORY.md#changing-a-running-cluster)
 
 ```shell
 ./play.sh                                                  # add a node: put it in the inventory first

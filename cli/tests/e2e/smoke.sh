@@ -497,18 +497,21 @@ check_update_adds_a_tls_san() {
   done
 }
 
+# k3s keeps its record (the Addon) of a packaged component that was turned off,
+# and does not apply the unchanged manifest again when the component is turned
+# on. Deleting the record is the documented step that brings it back.
 check_update_turns_a_component_back_on() {
   inventory_set barekube_disable "[servicelb]"
   run_playbook_logged update-enable || return 1
+  wait_for 300 "every node is Ready" all_nodes_are_ready || return 1
+  kc -n kube-system delete addon traefik --ignore-not-found || return 1
   if ! wait_for 300 "traefik is back" deployment_exists traefik; then
-    log "traefik did not come back; what k3s has on master-1:"
+    log "traefik did not come back; what k3s has:"
     node master-1 ls -la /var/lib/rancher/k3s/server/manifests || true
     kc get addon -A || true
     kc -n kube-system get helmchart,job,deploy || true
-    node master-1 cat /etc/systemd/system/k3s.service || true
     return 1
   fi
-  wait_for 300 "every node is Ready" all_nodes_are_ready
 }
 
 check_update_passes_extra_arguments() {

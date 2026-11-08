@@ -63,6 +63,14 @@ The inventory is the desired state. Edit it and run the playbook again:
 
 Running the playbook with nothing changed changes nothing.
 
+Turning a component **off** removes it from the cluster. Turning it back **on**
+needs one more step, because k3s keeps its record of the component and does not
+apply the unchanged manifest again:
+
+```shell
+kubectl -n kube-system delete addon traefik   # or servicelb, ...
+```
+
 ## Groups
 
 | Group | Required | |
