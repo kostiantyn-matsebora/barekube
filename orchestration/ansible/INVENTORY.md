@@ -69,6 +69,7 @@ apply the unchanged manifest again:
 
 ```shell
 kubectl -n kube-system delete addon traefik   # or servicelb, ...
+sudo systemctl restart k3s                    # on that master
 ```
 
 ## Groups
