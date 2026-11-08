@@ -55,7 +55,8 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
 
      ```shell
      curl -fsSL https://github.com/kostiantyn-matsebora/barekube/releases/latest/download/barekube-ansible.tar.gz | tar xz
-     ./barekube-ansible/play.sh
+     ./barekube-ansible/play.sh                                   # uses ./inventory.yml
+     ./barekube-ansible/play.sh -i ~/clusters/home/inventory.yml  # inventory anywhere
      ```
 
    - Ansible collection from [Galaxy](https://galaxy.ansible.com/ui/repo/published/kostiantyn_matsebora/barekube/), with Ansible:
