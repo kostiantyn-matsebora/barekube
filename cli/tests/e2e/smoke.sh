@@ -410,6 +410,11 @@ check_playbook_removes_and_readds_an_agent() {
     || { tail -40 "$STATE_DIR/logs/remove-agent.log"; return 1; }
   expect_eq "$(kc get nodes --no-headers | wc -l)" 4 "nodes after removing agent-2" || return 1
   ! node agent-2 test -e /usr/local/bin/k3s || { log "k3s is still installed on agent-2"; return 1; }
+  # The node is gone from the inventory as well: the playbook leaves the cluster alone.
+  inventory_drop_host agent-2
+  run_playbook >"$STATE_DIR/logs/drop-agent.log" 2>&1 || { tail -40 "$STATE_DIR/logs/drop-agent.log"; return 1; }
+  expect_eq "$(kc get nodes --no-headers | wc -l)" 4 "nodes after the playbook ran without agent-2" || return 1
+  inventory_add_host agents agent-2
   run_playbook >"$STATE_DIR/logs/readd-agent.log" 2>&1 || { tail -40 "$STATE_DIR/logs/readd-agent.log"; return 1; }
   wait_for 120 "agent-2 is Ready again" node_ready agent-2 || return 1
   expect_eq "$(kc get nodes --no-headers | wc -l)" 5 "nodes after adding agent-2 back"
@@ -420,6 +425,10 @@ check_playbook_removes_and_readds_a_master() {
     || { tail -40 "$STATE_DIR/logs/remove-master.log"; return 1; }
   expect_eq "$(kc get nodes --no-headers | wc -l)" 4 "nodes after removing master-3" || return 1
   wait_for 120 "master-3 has left etcd" test "$(etcd_members)" -eq 2 || return 1
+  inventory_drop_host master-3
+  run_playbook >"$STATE_DIR/logs/drop-master.log" 2>&1 || { tail -40 "$STATE_DIR/logs/drop-master.log"; return 1; }
+  expect_eq "$(etcd_members)" 2 "etcd members after the playbook ran without master-3" || return 1
+  inventory_add_host masters master-3
   run_playbook >"$STATE_DIR/logs/readd-master.log" 2>&1 || { tail -40 "$STATE_DIR/logs/readd-master.log"; return 1; }
   wait_for 180 "master-3 is Ready again" node_ready master-3 || return 1
   wait_for 120 "master-3 is in etcd again" test "$(etcd_members)" -eq 3
@@ -440,6 +449,84 @@ check_playbook_uninstall_needs_confirmation_and_then_removes_k3s() {
   done
   ! kubectl config get-contexts -o name | grep -qx "$KUBE_CONTEXT" \
     || { log "the cluster is still in the kubeconfig"; return 1; }
+}
+
+
+# ------------------------------------------ updating a cluster by its inventory
+# The inventory is the desired state: change it, run the playbook, and the
+# running cluster follows. Each step runs the playbook again on the same cluster.
+
+run_playbook_logged() {
+  local log_file="$STATE_DIR/logs/$1.log"
+  run_playbook >"$log_file" 2>&1 || { tail -60 "$log_file"; return 1; }
+}
+
+deployment_is_absent() { ! kc -n kube-system get deploy "$1" >/dev/null 2>&1; }
+deployment_exists() { kc -n kube-system get deploy "$1" >/dev/null 2>&1; }
+servicelb_is_absent() { [[ "$(kc -n kube-system get ds -o name)" != *svclb* ]]; }
+
+all_nodes_are_ready() {
+  local n
+  for n in "${NODES[@]}"; do node_ready "$n" || return 1; done
+}
+
+# The Subject Alternative Names of the certificate a master serves on 6443.
+api_certificate_names() {
+  local ip
+  ip="$(node_ip "$1")"
+  echo | openssl s_client -connect "$ip:6443" 2>/dev/null | openssl x509 -noout -ext subjectAltName
+}
+
+check_update_turns_components_off() {
+  deployment_exists traefik || { log "traefik is not there to be turned off"; return 1; }
+  inventory_set barekube_disable "[servicelb, traefik]"
+  run_playbook_logged update-disable || return 1
+  wait_for 240 "traefik is gone" deployment_is_absent traefik || return 1
+  wait_for 120 "servicelb is gone" servicelb_is_absent || return 1
+  wait_for 300 "every node is Ready" all_nodes_are_ready
+}
+
+check_update_adds_a_tls_san() {
+  inventory_set barekube_tls_san '["update.e2e.example"]'
+  run_playbook_logged update-tls-san || return 1
+  local m
+  for m in "${MASTERS[@]}"; do
+    wait_for 180 "$m serves a certificate for update.e2e.example" \
+      bash -c "$(declare -f node_ip node api_certificate_names); api_certificate_names $m | grep -q update.e2e.example" \
+      || return 1
+  done
+}
+
+check_update_turns_a_component_back_on() {
+  inventory_set barekube_disable "[servicelb]"
+  run_playbook_logged update-enable || return 1
+  wait_for 300 "traefik is back" deployment_exists traefik || return 1
+  wait_for 300 "every node is Ready" all_nodes_are_ready
+}
+
+check_update_passes_extra_arguments() {
+  inventory_set barekube_extra_args '"--node-label=e2e-update=true"'
+  run_playbook_logged update-extra-args || return 1
+  wait_for 300 "every node is Ready" all_nodes_are_ready || return 1
+  # Only servers take the arguments; the agents have no such label.
+  expect_eq "$(kc get nodes -l e2e-update=true --no-headers | wc -l)" 3 "nodes with the label" || return 1
+}
+
+check_update_flips_the_gvisor_default() {
+  local flipped="true" want=gvisor
+  [[ "$GVISOR_DEFAULT" == "true" ]] && { flipped="false"; want=""; }
+  inventory_set barekube_gvisor_default "$flipped"
+  run_playbook_logged update-gvisor || return 1
+  wait_for 240 "a pod without a RuntimeClass gets '${want:-none}'" plain_pod_gets_class "$want" || return 1
+  inventory_set barekube_gvisor_default "$GVISOR_DEFAULT"
+  run_playbook_logged update-gvisor-back || return 1
+  want=""; [[ "$GVISOR_DEFAULT" == "true" ]] && want=gvisor
+  wait_for 240 "a pod without a RuntimeClass gets '${want:-none}' again" plain_pod_gets_class "$want"
+}
+
+# After all the changes the playbook has nothing left to do.
+check_update_settles() {
+  check_playbook_rerun_changes_nothing
 }
 
 # --------------------------------------------------------------------- runner
@@ -480,6 +567,17 @@ if uses_playbooks; then
   check "the playbook refuses to remove the first master" check_playbook_refuses_to_remove_the_first_master
   check "the playbook removes an agent and site.yml adds it back" check_playbook_removes_and_readds_an_agent
   check "the playbook removes a master from etcd and site.yml adds it back" check_playbook_removes_and_readds_a_master
+fi
+if uses_playbooks; then
+  # Update scenario: change the inventory, run the playbook, the cluster follows.
+  if [[ "$INVENTORY_KIND" == "minimal" ]]; then
+    check "update: components are turned off by the inventory" check_update_turns_components_off
+  fi
+  check "update: a TLS SAN added to the inventory reaches the API certificate" check_update_adds_a_tls_san
+  check "update: a component is turned back on by the inventory" check_update_turns_a_component_back_on
+  check "update: extra k3s arguments reach the servers only" check_update_passes_extra_arguments
+  check "update: the gVisor default follows the inventory, both ways" check_update_flips_the_gvisor_default
+  check "update: the playbook settles with nothing left to change" check_update_settles
 fi
 check "the cluster survives losing a master" check_cluster_survives_losing_a_master
 check "an agent can be stopped and started" check_agent_stop_and_start

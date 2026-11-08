@@ -27,7 +27,9 @@ setup() {
     install_k3s_initial_master install_k3s_master install_k3s_agent show_k3s_token \
     install_longhorn_dependencies start_k3s_master stop_k3s_master start_k3s_agent \
     stop_k3s_agent killall_k3s uninstall_k3s enable_autoupdate upgrade_barekube \
-    echo_info echo_final
+    check_if_command_exists k3s_args_changed save_k3s_args echo_info echo_final
+  # Not installed unless a test says so.
+  mock_fail check_if_command_exists
 }
 
 test_install_dependencies() {
@@ -45,10 +47,12 @@ test_install_initial_master_without_reinstall() {
   run barekube_install_initial_master_command
   assert_status 0
   assert_calls \
+    "check_if_command_exists k3s" \
     "check_k3s_installed " \
     "echo_info Installing initial k3s master node..." \
     "gather_additional_args  " \
     "install_k3s_initial_master --disable=traefik" \
+    "save_k3s_args --disable=traefik" \
     "setup_gvisor " \
     "show_k3s_token " \
     "echo_final Failed to install initial k3s master node. Initial k3s master node installed successfully." \
@@ -84,6 +88,85 @@ test_repeatable_flag_values_with_spaces_stay_whole() {
   assert_called "install_k3s_initial_master 2:a b"
 }
 
+# ------------------------------------------------- changed arguments on an installed node
+
+# check_k3s_installed exits the command when k3s is there and nothing is to be
+# redone; the plain mock would let the script go on.
+exits_when_installed() {
+  check_k3s_installed() { echo "check_k3s_installed $*" >>"$CALLS"; exit 0; }
+}
+
+installed_with_flags() {
+  unset "MOCK_FAIL_$(_mock_key check_if_command_exists)"
+  exits_when_installed
+  args[--disable]="'traefik'"
+  args[--server]="https://m:6443"
+  mock_output resolve_server_url "https://m:6443"
+  mock_output resolve_token "t"
+  mock_output gather_additional_args "--disable=traefik"
+}
+
+test_initial_master_updates_an_installed_node_when_the_arguments_changed() {
+  installed_with_flags
+  run barekube_install_initial_master_command
+  assert_status 0
+  assert_calls \
+    "check_if_command_exists k3s" \
+    "gather_additional_args  " \
+    "k3s_args_changed --disable=traefik" \
+    "echo_info Installing initial k3s master node..." \
+    "install_k3s_initial_master --disable=traefik" \
+    "save_k3s_args --disable=traefik" \
+    "echo_final Failed to update initial k3s master node. Initial k3s master node updated successfully." \
+    "report_state updated"
+}
+
+test_initial_master_leaves_an_installed_node_alone_when_the_arguments_are_the_same() {
+  installed_with_flags
+  mock_fail k3s_args_changed
+  run barekube_install_initial_master_command
+  assert_called "check_k3s_installed "
+  refute_called_matching "install_k3s_initial_master"
+  refute_called_matching "save_k3s_args"
+}
+
+test_initial_master_leaves_an_installed_node_alone_without_flags() {
+  unset "MOCK_FAIL_$(_mock_key check_if_command_exists)"
+  exits_when_installed
+  run barekube_install_initial_master_command
+  assert_called "check_k3s_installed "
+  refute_called_matching "k3s_args_changed"
+  refute_called_matching "install_k3s_initial_master"
+}
+
+test_reinstall_never_takes_the_update_path() {
+  installed_with_flags
+  mock check_k3s_installed
+  args[--reinstall]=1
+  run barekube_install_initial_master_command
+  assert_called "check_k3s_installed 1"
+  refute_called_matching "report_state updated"
+  assert_called "report_state installed"
+}
+
+test_master_node_updates_an_installed_node_when_the_arguments_changed() {
+  installed_with_flags
+  run barekube_install_master_node_command
+  assert_status 0
+  assert_called "install_k3s_master https://m:6443 --disable=traefik"
+  assert_called "save_k3s_args --disable=traefik"
+  assert_called "report_state updated"
+  refute_called_matching "setup_gvisor"
+}
+
+test_master_node_leaves_an_installed_node_alone_when_the_arguments_are_the_same() {
+  installed_with_flags
+  mock_fail k3s_args_changed
+  run barekube_install_master_node_command
+  assert_called "check_k3s_installed "
+  refute_called_matching "install_k3s_master"
+}
+
 test_install_master_node() {
   mock_output resolve_server_url "https://m:6443"
   mock_output resolve_token "t"
@@ -95,7 +178,7 @@ test_install_master_node() {
   assert_called "echo_info Joining cluster at: https://m:6443"
   assert_calls_in_order \
     "check_k3s_installed " "resolve_server_url  " "resolve_token " "gather_additional_args  " \
-    "install_k3s_master https://m:6443 " "setup_gvisor " \
+    "install_k3s_master https://m:6443 " "save_k3s_args " "setup_gvisor " \
     "echo_final Failed to install k3s master node. Another k3s master node installed successfully." \
     "report_state installed"
 }

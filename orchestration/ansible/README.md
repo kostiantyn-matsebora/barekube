@@ -110,6 +110,12 @@ Uses Ansible if installed, else Docker (`BAREKUBE_USE_DOCKER=1` forces Docker).
 
 ## Change a running cluster
 
+The inventory is the desired state: edit it and run `./play.sh` again. The cluster follows, and only what differs changes.
+
+- Add or remove nodes: add the host to `masters` or `agents` and run the playbook. To remove one, run `remove_node` first, then delete the host
+- Change `barekube_disable`, `barekube_tls_san` or `barekube_extra_args`: the servers are reconfigured and restarted one at a time
+- Change `barekube_gvisor_default`: applied from a master, no restart
+
 ```shell
 ./play.sh                                                  # add a node: put it in the inventory first
 ./play.sh remove_node.yml -e barekube_node=agent-2         # drain, delete, uninstall

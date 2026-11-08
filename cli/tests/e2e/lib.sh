@@ -81,6 +81,31 @@ run_playbook() {
   )
 }
 
+# --- Editing the inventory, as a user does on day two ----------------------
+INVENTORY_FILE="$STATE_DIR/inventory.yml"
+
+# inventory_set KEY VALUE: sets (or changes) a barekube_* setting under all.vars,
+# which is the last block of the inventory the test writes.
+inventory_set() {
+  inventory_unset "$1"
+  printf '    %s: %s\n' "$1" "$2" >>"$INVENTORY_FILE"
+}
+
+# inventory_unset KEY: removes a setting, so its default applies again.
+inventory_unset() { sed -i "/^    $1:/d" "$INVENTORY_FILE"; }
+
+# inventory_drop_host NODE: takes a host out of the inventory.
+inventory_drop_host() { sed -i "/^        $1: /d" "$INVENTORY_FILE"; }
+
+# inventory_add_host GROUP NODE: puts a host at the end of masters or agents.
+inventory_add_host() {
+  local group="$1" name="$2" before line
+  [[ "$group" == "masters" ]] && before="    agents:" || before="  vars:"
+  line="        $name: { ansible_host: $(node_ip "$name") }"
+  awk -v before="$before" -v line="$line" '$0 == before { print line } { print }' \
+    "$INVENTORY_FILE" >"$INVENTORY_FILE.new" && mv "$INVENTORY_FILE.new" "$INVENTORY_FILE"
+}
+
 log() { printf '[%s] %s\n' "$(date +%T)" "$*"; }
 group() { printf '::group::%s\n' "$*"; }
 endgroup() { printf '::endgroup::\n'; }

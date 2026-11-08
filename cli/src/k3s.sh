@@ -14,6 +14,10 @@ k3s_service_name() {
     fi
 }
 
+# Where the k3s server arguments of the last install are remembered, so a
+# repeated install can tell whether the requested ones changed.
+K3S_ARGS_FILE="/etc/barekube/k3s-args"
+
 # Set by the install commands from the repeatable --tls-san and --disable flags.
 TLS_SANS=()
 DISABLE_COMPONENTS=()
@@ -29,6 +33,30 @@ check_k3s_installed() {
             exit 0
         fi
     fi
+}
+
+# Collapses runs of whitespace so equal arguments compare equal.
+normalize_args() {
+    local -a WORDS
+    read -ra WORDS <<<"$1"
+    echo "${WORDS[*]}"
+}
+
+# Whether k3s is installed here and the server arguments asked for differ from
+# the ones it was installed with. Nodes installed before the arguments were
+# remembered count as different, once. Usage: k3s_args_changed ARGS
+k3s_args_changed() {
+    local WANTED
+    WANTED="$(normalize_args "$1")"
+    [[ -f "$K3S_ARGS_FILE" ]] && [[ "$(normalize_args "$(cat "$K3S_ARGS_FILE")")" == "$WANTED" ]] && return 1
+    return 0
+}
+
+# Usage: save_k3s_args ARGS
+save_k3s_args() {
+    sudo mkdir -p "$(dirname "$K3S_ARGS_FILE")"
+    normalize_args "$1" | sudo tee "$K3S_ARGS_FILE" >/dev/null
+    exit_if_error "Failed to remember the k3s arguments"
 }
 
 # Builds the extra k3s server arguments. Values given as flags are used as is

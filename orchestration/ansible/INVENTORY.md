@@ -50,6 +50,19 @@ all:
     barekube_show_output: false
 ```
 
+## Changing a running cluster
+
+The inventory is the desired state. Edit it and run the playbook again:
+
+| Change | What happens |
+|---|---|
+| host added to `masters` or `agents` | the node joins |
+| `barekube_disable`, `barekube_tls_san`, `barekube_extra_args` | each server is reconfigured and restarted, one at a time; agents are untouched |
+| `barekube_gvisor_default` | applied from a master, no restart |
+| host removed from the inventory | nothing: run `remove_node` first, then delete the host |
+
+Running the playbook with nothing changed changes nothing.
+
 ## Groups
 
 | Group | Required | |

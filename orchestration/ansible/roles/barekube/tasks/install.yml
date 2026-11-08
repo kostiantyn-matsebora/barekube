@@ -13,7 +13,7 @@
         argv: "{{ barekube_install_argv }}"
       environment: "{{ barekube_install_env | default({}) }}"
       register: barekube_result
-      changed_when: (barekube_result.stdout | trim | split('\n') | last | trim) == 'installed'
+      changed_when: (barekube_result.stdout | trim | split('\n') | last | trim) in ['installed', 'updated']
       no_log: "{{ not (barekube_show_output | bool) }}"
   rescue:
     - name: Give up after the last attempt
