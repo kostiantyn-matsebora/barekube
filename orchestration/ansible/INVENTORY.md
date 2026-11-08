@@ -63,14 +63,18 @@ The inventory is the desired state. Edit it and run the playbook again:
 
 Running the playbook with nothing changed changes nothing.
 
-Turning a component **off** removes it from the cluster. Turning it back **on**
-needs one more step, because k3s keeps its record of the component and does not
-apply the unchanged manifest again:
+Turning a component **off** removes it from the cluster. A component that was
+never deployed comes up when you stop disabling it. Turning back **on** one that
+ran before is not reliable in k3s: it keeps its record of the component (an
+`Addon`) and does not always recreate the Helm chart. If it does not come back,
+delete the record and restart k3s on a master:
 
 ```shell
 kubectl -n kube-system delete addon traefik   # or servicelb, ...
-sudo systemctl restart k3s                    # on that master
+sudo systemctl restart k3s
 ```
+
+Test the change on a spare cluster first.
 
 ## Groups
 
