@@ -26,10 +26,12 @@
     - name: Wait before trying again
       ansible.builtin.wait_for:
         timeout: "{{ (barekube_install_retry_delay | int) * (2 ** ((barekube_install_attempt | default(1) | int) - 1)) }}"
-      delegate_to: localhost
-      become: false
+
+    # Not passed as a variable of the include: that would define the attempt
+    # in terms of itself.
+    - name: Count the attempt
+      ansible.builtin.set_fact:
+        barekube_install_attempt: "{{ (barekube_install_attempt | default(1) | int) + 1 }}"
 
     - name: Try again
       ansible.builtin.include_tasks: install.yml
-      vars:
-        barekube_install_attempt: "{{ (barekube_install_attempt | default(1) | int) + 1 }}"
