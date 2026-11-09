@@ -22,7 +22,7 @@ What barekube brings:
 - <img src="assets/icons/gvisor.svg" width="20" height="20" align="top"> [gVisor](https://gvisor.dev/) - security layer for running containers efficiently and securely.
 - <img src="assets/icons/longhorn.svg" width="20" height="20" align="top"> [Longhorn](https://longhorn.io/) storage prerequisites on the nodes.
 - <img src="assets/icons/ansible.svg" width="20" height="20" align="top"> [Ansible](https://www.ansible.com/) playbooks that build, change and remove a whole cluster from an inventory.
-- Optional: the [console](console/README.md), a control plane UI for the cluster, with a small agent on each node.
+- <img src="assets/icons/console.svg" width="20" height="20" align="top"> Optional: the [console](console/README.md), a control plane UI for the cluster, with a small agent on each node.
 
 Everything above that (HA API endpoint, load balancing, ingress, ...) is up to your platform.
 
