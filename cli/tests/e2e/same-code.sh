@@ -9,7 +9,7 @@ old="$1" new="$2"
 
 paths=(
   cli/src cli/commands cli/settings.yml cli/bashly.yml cli/release cli/tests/e2e
-  orchestration .github/workflows/e2e.yml
+  orchestration console .github/workflows/e2e.yml
 )
 
 # A version bump changes these lines and nothing that runs differently.

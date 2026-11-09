@@ -1,8 +1,12 @@
 name: Release
 
-# Publishes a GitHub release for a version tag: the CLI script, its SHA-256
-# checksum, a keyless Sigstore signature and a build provenance attestation.
-# It runs only after the unit tests and the five-node cluster test pass. The
+# Publishes a GitHub release for a version tag: the CLI script, the playbooks,
+# the Ansible collection and the console's node-agent binaries, each with a
+# SHA-256 checksum, a keyless Sigstore signature and a build provenance
+# attestation. After the release it publishes the console's Docker image
+# (ghcr.io/kostiantyn-matsebora/barekube-console), multi-architecture, signed and
+# attested the same way. It runs only after the unit tests, the console tests
+# and the five-node cluster test pass. The
 # cluster test is not repeated when an earlier green run covers the same code
 # (only documentation or version numbers changed since, see same-code.sh).
 # Nothing is signed from a developer machine; the signing identity is this
@@ -16,6 +20,11 @@ permissions: {}
 jobs:
   tests:
     uses: ./.github/workflows/cli-tests.yml
+    permissions:
+      contents: read
+
+  console-tests:
+    uses: ./.github/workflows/console-tests.yml
     permissions:
       contents: read
 
@@ -73,10 +82,10 @@ jobs:
 
   release:
     name: Build, sign and publish
-    needs: [tests, proof, e2e]
+    needs: [tests, console-tests, proof, e2e]
     # The cluster test is skipped only when an earlier run of the same code passed.
     if: >-
-      ${{ !cancelled() && needs.tests.result == 'success' && needs.proof.result == 'success'
+      ${{ !cancelled() && needs.tests.result == 'success' && needs.console-tests.result == 'success' && needs.proof.result == 'success'
       && (needs.e2e.result == 'success' || (needs.e2e.result == 'skipped' && needs.proof.outputs.reuse == 'true')) }}
     runs-on: ubuntu-latest
     permissions:
@@ -116,6 +125,24 @@ jobs:
             exit 1
           fi
 
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: console/go.mod
+          cache-dependency-path: console/go.sum
+
+      # The node-agent runs on every node, whatever its CPU: the same three
+      # architectures the console image has. Static, so no libc on the node matters.
+      - name: Build the node-agent
+        working-directory: console
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+        run: |
+          mkdir -p ../cli/release
+          for arch in amd64 arm64 arm; do
+            GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "../cli/release/node-agent-linux-$arch" ./cmd/node-agent
+          done
+
       # The shipped script is built here, from the tagged sources, with the
       # pinned bashly version - and must equal the committed copy.
       - name: Build the script
@@ -143,6 +170,8 @@ jobs:
           sha256sum barekube-ansible.tar.gz > barekube-ansible.tar.gz.sha256
           collection="$(ls kostiantyn_matsebora-barekube-*.tar.gz)"
           sha256sum "$collection" > "$collection.sha256"
+          # The node-agent's checksums are a file of their own, for the same reason.
+          sha256sum node-agent-linux-* > node-agent.SHA256SUMS
 
       - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
 
@@ -153,6 +182,9 @@ jobs:
           cosign sign-blob --yes --bundle barekube-ansible.tar.gz.sigstore.json barekube-ansible.tar.gz
           collection="$(ls kostiantyn_matsebora-barekube-*.tar.gz)"
           cosign sign-blob --yes --bundle "$collection.sigstore.json" "$collection"
+          for agent in node-agent-linux-*; do
+            cosign sign-blob --yes --bundle "$agent.sigstore.json" "$agent"
+          done
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -160,6 +192,7 @@ jobs:
             cli/release/barekube
             cli/release/barekube-ansible.tar.gz
             cli/release/kostiantyn_matsebora-barekube-*.tar.gz
+            cli/release/node-agent-linux-*
 
       - name: Publish the release
         working-directory: cli/release
@@ -170,6 +203,8 @@ jobs:
             barekube-ansible.tar.gz barekube-ansible.tar.gz.sha256 barekube-ansible.tar.gz.sigstore.json \
             kostiantyn_matsebora-barekube-*.tar.gz kostiantyn_matsebora-barekube-*.tar.gz.sha256 \
             kostiantyn_matsebora-barekube-*.tar.gz.sigstore.json \
+            node-agent-linux-amd64 node-agent-linux-arm64 node-agent-linux-arm node-agent.SHA256SUMS \
+            node-agent-linux-amd64.sigstore.json node-agent-linux-arm64.sigstore.json node-agent-linux-arm.sigstore.json \
             --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
 
   # The same collection, on Ansible Galaxy. It runs only when the repository has
@@ -195,6 +230,109 @@ jobs:
           pipx install ansible-core
           gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern 'kostiantyn_matsebora-barekube-*.tar.gz'
           ansible-galaxy collection publish kostiantyn_matsebora-barekube-*.tar.gz --token "$GALAXY_API_KEY"
+
+  # The console as a Docker image, for the machine that runs it (the compose file
+  # in console/deploy). It is published only after the release it belongs to.
+  console-image:
+    name: Build, sign and publish the console image
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
+      id-token: write # keyless signing and the attestation
+      attestations: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/barekube-console
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: console
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          provenance: false
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.title=barekube console
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      # Signed by digest, so the signature holds for every tag of the image.
+      - name: Sign
+        run: cosign sign --yes "$IMAGE@${{ steps.push.outputs.digest }}"
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  # Pulls the published image as a user would, checks its signature and runs
+  # the compose file with it.
+  verify-console-image:
+    name: The published console image and compose file work
+    needs: console-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: The signature comes from this release workflow
+        run: |
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/${{ github.ref_name }}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "ghcr.io/${{ github.repository_owner }}/barekube-console:${{ github.ref_name }}" >/dev/null
+
+      - name: Run it with the compose file of the release
+        working-directory: console/deploy
+        env:
+          CONSOLE_VERSION: ${{ github.ref_name }}
+        run: |
+          ./generate-tokens.sh
+          mkdir -p config/credentials
+          cat >config/config.yaml <<'EOF'
+          nodeAgent:
+            mock: false
+            credentialsDir: /secrets/node-agent
+          listenAddr: ":8080"
+          nodes:
+            - name: master-1
+              ip: 127.0.0.1
+              role: master
+              nodeAgentPort: 9091
+              operations: [reboot, standby, rejoin, poweroff]
+          EOF
+          printf '%064d\n' 0 >config/credentials/master-1
+          docker compose up -d
+          ./check-running.sh http://localhost:8080 \
+            "$(sed -n 's/^CONSOLE_UI_TOKEN=//p' .env)" "$(sed -n 's/^CONSOLE_NODE_TOKEN=//p' .env)" master-1 \
+            || { docker compose logs; exit 1; }
 
   # Follows the README as a new user would: downloads the published release,
   # installs it, runs it and verifies its checksum and signature.

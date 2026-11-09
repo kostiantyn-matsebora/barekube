@@ -542,6 +542,160 @@ check_update_settles() {
   check_playbook_rerun_changes_nothing
 }
 
+
+# ------------------------------------------------------------------ console
+
+# Every node-agent heartbeat reaches the console, which then reports the node.
+console_nodes_json() { console_api /api/nodes; }
+
+console_node_is_heartbeating() {
+  console_nodes_json | jq -e --arg n "$1" '.[] | select(.name == $n) | .heartbeat != null' >/dev/null
+}
+
+console_node_is_healthy() {
+  console_nodes_json | jq -e --arg n "$1" '.[] | select(.name == $n) | .state == "healthy"' >/dev/null
+}
+
+check_console_knows_only_the_nodes_with_an_agent() {
+  local names
+  names="$(console_nodes_json | jq -r 'map(.name) | sort | join(",")')"
+  expect_eq "$names" "$(printf '%s\n' "${CONSOLE_NODES[@]}" | sort | paste -sd,)" "nodes in the console" || return 1
+  expect_eq "$(console_nodes_json | jq -r --arg n "$CONSOLE_NO_AGENT" 'map(select(.name == $n)) | length')" 0 "the node without an agent"
+}
+
+check_every_agent_heartbeats_to_the_console() {
+  local n
+  for n in "${CONSOLE_NODES[@]}"; do
+    wait_for 120 "$n heartbeats to the console" console_node_is_heartbeating "$n" || return 1
+  done
+}
+
+check_console_reaches_every_agent_and_calls_the_nodes_healthy() {
+  local n
+  for n in "${CONSOLE_NODES[@]}"; do
+    wait_for 120 "the console reports $n healthy" console_node_is_healthy "$n" || { console_nodes_json; return 1; }
+  done
+}
+
+# The operations of a node, its role defaults or its override, reach the console
+# and the node's own permissions: a node that may not power off cannot.
+check_console_operations_follow_the_role_and_the_override() {
+  local n want got
+  for n in "${CONSOLE_NODES[@]}"; do
+    want="$(console_node_operations "$n" | tr ',' '\n' | sort | paste -sd,)"
+    got="$(console_nodes_json | jq -r --arg n "$n" '.[] | select(.name == $n) | .operations | sort | join(",")')"
+    expect_eq "$got" "$want" "operations of $n in the console" || return 1
+  done
+}
+
+check_node_agents_hold_only_the_permissions_of_their_operations() {
+  local n
+  for n in "${CONSOLE_NODES[@]}"; do
+    expect_eq "$(node "$n" getent passwd barekube-agent | cut -d: -f7)" /usr/sbin/nologin "login shell on $n" || return 1
+    expect_eq "$(node "$n" stat -c '%a %U' /etc/barekube-agent/env)" "600 root" "token file on $n" || return 1
+    expect_eq "$(node "$n" stat -c '%a' /etc/barekube-agent/key.pem)" 600 "private key on $n" || return 1
+    ! node "$n" grep -q "$CONSOLE_NODE_TOKEN" /etc/systemd/system/barekube-node-agent.service \
+      || { log "the token is in the unit on $n"; return 1; }
+    node "$n" grep -q "^NODE_AGENT_TOKEN=$CONSOLE_NODE_TOKEN\$" /etc/barekube-agent/env || { log "the token file on $n is wrong"; return 1; }
+    node "$n" grep -q -- "-addr :$(console_node_port "$n") " /etc/systemd/system/barekube-node-agent.service \
+      || { log "$n does not listen on port $(console_node_port "$n")"; return 1; }
+    node "$n" systemctl is-active barekube-node-agent >/dev/null || return 1
+    # Power off only where the operations say so, and only ever on a master.
+    if console_has_poweroff "$n"; then
+      node "$n" grep -q "login1.power-off" /etc/polkit-1/rules.d/49-barekube-agent.rules || { log "$n lacks the power-off rule"; return 1; }
+      node "$n" test -f /etc/sudoers.d/barekube-agent-etcd-snapshot || { log "$n lacks the snapshot rule"; return 1; }
+    else
+      ! node "$n" grep -q "power-off" /etc/polkit-1/rules.d/49-barekube-agent.rules || { log "$n may power off"; return 1; }
+      ! node "$n" test -e /etc/sudoers.d/barekube-agent-etcd-snapshot || { log "$n has the snapshot rule"; return 1; }
+    fi
+    # The k3s unit of the node, and only that one, can be managed.
+    local unit=k3s-agent
+    console_is_master "$n" && unit=k3s
+    node "$n" grep -q "action.lookup(\"unit\") == \"$unit.service\"" /etc/polkit-1/rules.d/49-barekube-agent.rules \
+      || { log "$n: the rule does not name $unit.service"; return 1; }
+  done
+  ! node "$CONSOLE_NO_AGENT" test -e /usr/local/bin/barekube-node-agent || { log "$CONSOLE_NO_AGENT has an agent"; return 1; }
+  ! node "$CONSOLE_NO_AGENT" id barekube-agent >/dev/null 2>&1 || { log "$CONSOLE_NO_AGENT has the agent account"; return 1; }
+}
+
+# The agent account really has only what the rules grant: it cannot become root.
+check_the_agent_account_cannot_escalate() {
+  local n
+  for n in "${CONSOLE_NODES[@]}"; do
+    ! node "$n" runuser -u barekube-agent -- sudo -n true 2>/dev/null || { log "the agent account has sudo on $n"; return 1; }
+    ! node "$n" runuser -u barekube-agent -- cat /var/lib/rancher/k3s/server/token 2>/dev/null || { log "the agent reads the join token on $n"; return 1; }
+  done
+}
+
+check_pinned_fingerprints_match_the_certificates() {
+  local n want
+  for n in "${CONSOLE_NODES[@]}"; do
+    want="$(node "$n" openssl x509 -in /etc/barekube-agent/cert.pem -noout -fingerprint -sha256 | sed 's/.*=//; s/://g' | tr 'A-F' 'a-f')"
+    expect_eq "$(<"$CONSOLE_CONFIG_DIR/credentials/$n")" "$want" "fingerprint of $n" || return 1
+  done
+}
+
+check_console_doors_stay_shut() {
+  local url="http://127.0.0.1:$CONSOLE_PORT" code
+  code="$(curl -s -o /dev/null -w '%{http_code}' "$url/api/nodes")"
+  expect_eq "$code" 401 "nodes without a login" || return 1
+  code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer wrong' -d '{"node":"master-1"}' "$url/api/internal/heartbeat")"
+  expect_eq "$code" 401 "a heartbeat with a wrong token" || return 1
+  # The UI token opens the UI, not the door of the nodes.
+  code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $CONSOLE_UI_TOKEN" -d '{"node":"master-1"}' "$url/api/internal/heartbeat")"
+  expect_eq "$code" 401 "a heartbeat with the UI token" || return 1
+  # A node agent refuses a call without the token, and with the UI token.
+  local ip
+  ip="$(node_ip master-1)"
+  code="$(curl -sk -X POST -o /dev/null -w "%{http_code}" "https://$ip:9091/k3s/status")"
+  [[ "$code" == 401 || "$code" == 403 ]] || { log "an agent answered $code without a token"; return 1; }
+  code="$(curl -sk -X POST -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $CONSOLE_UI_TOKEN" "https://$ip:9091/k3s/status")"
+  [[ "$code" == 401 || "$code" == 403 ]] || { log "an agent answered $code to the UI token"; return 1; }
+}
+
+check_installing_the_agent_again_changes_nothing() {
+  local n out
+  for n in "${CONSOLE_NODES[@]}"; do
+    # shellcheck disable=SC2046
+    out="$(lxc exec "$n" --env CONSOLE_NODE_TOKEN="$CONSOLE_NODE_TOKEN" -- \
+      barekube install node-agent --binary /usr/local/bin/barekube-node-agent $(console_install_flags "$n") 2>&1)" \
+      || { printf '%s\n' "$out"; return 1; }
+    expect_eq "$(printf '%s\n' "$out" | last_line)" "already installed" "state of the second install on $n" || return 1
+  done
+}
+
+check_changing_a_setting_updates_the_agent() {
+  local n=master-1 out
+  out="$(lxc exec "$n" --env CONSOLE_NODE_TOKEN="$CONSOLE_NODE_TOKEN" -- \
+    barekube install node-agent --yes --binary /usr/local/bin/barekube-node-agent --console-addr "$(console_url)" \
+    --node-name "$n" --heartbeat-interval 7s 2>&1)" || { printf '%s\n' "$out"; return 1; }
+  expect_eq "$(printf '%s\n' "$out" | last_line)" installed "a changed heartbeat is applied" || return 1
+  node "$n" grep -q -- "-heartbeat-interval 7s" /etc/systemd/system/barekube-node-agent.service || return 1
+  wait_for 60 "the agent runs again" node "$n" systemctl is-active barekube-node-agent || return 1
+  # And back, so the later checks see the defaults.
+  # shellcheck disable=SC2046
+  lxc exec "$n" --env CONSOLE_NODE_TOKEN="$CONSOLE_NODE_TOKEN" -- \
+    barekube install node-agent --binary /usr/local/bin/barekube-node-agent $(console_install_flags "$n") >/dev/null
+  wait_for 120 "$n heartbeats again" console_node_is_heartbeating "$n"
+}
+
+check_the_agent_can_be_removed_and_installed_again() {
+  local n=agent-2 out
+  node "$n" barekube install node-agent --remove --yes >/dev/null
+  ! node "$n" test -e /usr/local/bin/barekube-node-agent || return 1
+  ! node "$n" id barekube-agent >/dev/null 2>&1 || return 1
+  ! node "$n" test -e /etc/polkit-1/rules.d/49-barekube-agent.rules || return 1
+  lxc file push "$CONSOLE_DIR/bin/node-agent-linux-$(<"$CONSOLE_DIR/arch")" "$n/tmp/node-agent" --mode 0755
+  # shellcheck disable=SC2046
+  out="$(lxc exec "$n" --env CONSOLE_NODE_TOKEN="$CONSOLE_NODE_TOKEN" -- \
+    barekube install node-agent --binary /tmp/node-agent $(console_install_flags "$n") 2>&1)" || { printf '%s\n' "$out"; return 1; }
+  expect_eq "$(printf '%s\n' "$out" | last_line)" installed "state after installing again" || return 1
+  # The certificate is new, so the console must pin the new one.
+  printf '%s\n' "$out" | sed -n 's/^fingerprint //p' >"$CONSOLE_CONFIG_DIR/credentials/$n"
+  node "$n" rm -f /tmp/node-agent
+  wait_for 120 "$n heartbeats again" console_node_is_heartbeating "$n"
+}
+
 # --------------------------------------------------------------------- runner
 
 check "barekube is the version under test on every node" check_version
@@ -574,6 +728,20 @@ check "Longhorn prerequisites are in place on every node" check_longhorn_prerequ
 check "re-running the gVisor install keeps the cluster healthy" check_gvisor_install_command_can_be_rerun
 check "re-running the Longhorn dependencies install works" check_longhorn_install_command_can_be_rerun
 check "re-running installs is idempotent" check_idempotent_install
+if console_enabled; then
+  console_start
+  check "console: it knows the nodes with an agent and no other" check_console_knows_only_the_nodes_with_an_agent
+  check "console: every agent sends its heartbeat" check_every_agent_heartbeats_to_the_console
+  check "console: it reaches every agent and the nodes are healthy" check_console_reaches_every_agent_and_calls_the_nodes_healthy
+  check "console: operations follow the role and the override of a node" check_console_operations_follow_the_role_and_the_override
+  check "console: the agents hold only the permissions of their operations" check_node_agents_hold_only_the_permissions_of_their_operations
+  check "console: the agent account cannot become root or read the join token" check_the_agent_account_cannot_escalate
+  check "console: the pinned fingerprints are those of the certificates" check_pinned_fingerprints_match_the_certificates
+  check "console: its doors stay shut to the wrong token" check_console_doors_stay_shut
+  check "console: installing the agent again changes nothing" check_installing_the_agent_again_changes_nothing
+  check "console: a changed setting is applied to the agent" check_changing_a_setting_updates_the_agent
+  check "console: an agent can be removed and installed again" check_the_agent_can_be_removed_and_installed_again
+fi
 if uses_playbooks; then
   check "kubectl works with the kubeconfig the playbook saved" check_kubectl_works_with_the_saved_kubeconfig
   check "running the playbook again changes nothing" check_playbook_rerun_changes_nothing

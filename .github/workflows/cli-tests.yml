@@ -90,7 +90,7 @@ jobs:
             --collections-path "$RUNNER_TEMP/collections"
           mkdir "$RUNNER_TEMP/elsewhere" && cd "$RUNNER_TEMP/elsewhere"
           cp "$GITHUB_WORKSPACE/orchestration/ansible/inventory.example.yml" inventory.yml
-          for playbook in site remove_node uninstall; do
+          for playbook in site remove_node uninstall remove_console_agent; do
             ANSIBLE_COLLECTIONS_PATH="$RUNNER_TEMP/collections" \
               ansible-playbook -i inventory.yml "kostiantyn_matsebora.barekube.$playbook" --syntax-check
           done
@@ -117,11 +117,17 @@ jobs:
           BAREKUBE_USE_DOCKER: "1"
         run: ./play.sh -i inventory.example.yml site.yml --syntax-check
 
+  # The optional console and its node-agent (the same module, own workflow).
+  console:
+    uses: ./.github/workflows/console-tests.yml
+    permissions:
+      contents: read
+
   # The single required status check for branch protection.
   ci-green:
     name: ci-green
     if: always()
-    needs: [test, release-up-to-date, readme-install, ansible-lint]
+    needs: [test, release-up-to-date, readme-install, ansible-lint, console]
     runs-on: ubuntu-latest
     steps:
       - name: Fail unless every job passed
@@ -129,4 +135,5 @@ jobs:
           [ "${{ needs.test.result }}" = "success" ] \
             && [ "${{ needs.release-up-to-date.result }}" = "success" ] \
             && [ "${{ needs.ansible-lint.result }}" = "success" ] \
+            && [ "${{ needs.console.result }}" = "success" ] \
             && [ "${{ needs.readme-install.result }}" = "success" ]
