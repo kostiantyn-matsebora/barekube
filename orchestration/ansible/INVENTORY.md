@@ -27,7 +27,7 @@ all:
     ansible_user: ubuntu
     ansible_become: true
 
-    barekube_version: v0.4.1
+    barekube_version: v0.5.0
     barekube_longhorn: true
     barekube_gvisor_default: false
     barekube_disable: []                 # for example [servicelb, traefik]
@@ -39,7 +39,7 @@ all:
 
     barekube_verify_signature: true
     barekube_cli_path: ""
-    barekube_release_url: https://github.com/kostiantyn-matsebora/barekube/releases/download/v0.4.1
+    barekube_release_url: https://github.com/kostiantyn-matsebora/barekube/releases/download/v0.5.0
     barekube_signer_identity: ^https://github\.com/kostiantyn-matsebora/barekube/\.github/workflows/release\.yml@refs/tags/v
 
     barekube_ready_timeout: 300
@@ -48,7 +48,15 @@ all:
     barekube_install_retry_delay: 10
 
     barekube_show_output: false
+
+    # The console agents are off by default. Enable them with these three:
+    barekube_console_agent: false
+    barekube_console_address: http://192.168.1.5:8080
+    # barekube_console_node_token: "{{ vault_console_node_token }}"   # optional: made and printed when not set
 ```
+
+Hosts are written as objects only to override something, for example
+`192.168.1.5: { barekube_console_port: 9199 }`.
 
 ## Changing a running cluster
 
@@ -125,6 +133,102 @@ Plain Ansible variables, set on `all`, a group or a host.
 | `barekube_release_url` | URL | the GitHub release of `barekube_version` | where the release files are downloaded from |
 | `barekube_signer_identity` | regex | the release workflow of this repository | the identity the signature must come from |
 
+## The console agents
+
+Optional and off by default. The [console](../../console/README.md) is a web UI
+that manages the nodes through a small agent on each one. To use it, set three
+variables; every other one has a default.
+
+```yaml
+all:
+  vars:
+    barekube_console_agent: true
+    barekube_console_address: http://192.168.1.5:8080
+    # barekube_console_node_token: "{{ vault_console_node_token }}"   # optional: made and printed when not set
+```
+
+The token is the `CONSOLE_NODE_TOKEN` of the console. Keep it in Ansible Vault or
+pass it with `-e`. It is checked for length and characters before anything is
+installed, hidden from the output and written only to a file that root can read
+on each node.
+
+Nothing is required per node. The role of a node comes from its group, never
+from a variable, and every setting below has a default for that role. Set one
+only to override it, on `all`, on `masters` or `agents` (shared by the group) or
+on one host. The most specific one wins, as for any Ansible variable.
+
+```yaml
+all:
+  children:
+    masters:
+      hosts:
+        192.168.1.10:
+        192.168.1.5:
+          barekube_console_port: 9199                 # one host
+          barekube_console_operations: [reboot, standby]
+      vars:
+        barekube_console_api_vip: 192.168.1.100       # all masters
+        barekube_console_api_gateway: 192.168.1.1
+    agents:
+      hosts:
+        192.168.1.50:
+  vars:
+    barekube_console_agent: true
+    barekube_console_address: http://192.168.1.5:8080
+    # barekube_console_node_token: "{{ vault_console_node_token }}"   # optional: made and printed when not set
+```
+
+`barekube_console_agent` is decided per host, with normal Ansible precedence.
+Enable it for everything and leave one node out, or enable it for one group or
+one host only. A node without it gets no agent and is left out of the exported
+console configuration.
+
+```yaml
+all:
+  children:
+    masters:
+      hosts:
+        192.168.1.10:
+        192.168.1.15:
+    agents:
+      hosts:
+        192.168.1.50:
+        192.168.1.30:
+          barekube_console_agent: false     # this one is not managed by the console
+  vars:
+    barekube_console_agent: true            # all the others are
+    barekube_console_address: http://192.168.1.5:8080
+    # barekube_console_node_token: "{{ vault_console_node_token }}"   # optional: made and printed when not set
+```
+
+The address and the token are checked only on the hosts that have the agent.
+Ansible prints a warning that the host group `barekube_console_agent_True`
+matched nothing when no host has it; that is expected.
+
+| Variable | Type | Default | |
+|---|---|---|---|
+| `barekube_console_agent` | bool | `false` | install the node-agent on this node; set it on `all`, a group or a host |
+| `barekube_console_address` | URL | required | where the console runs; the nodes send their heartbeat here |
+| `barekube_console_node_token` | string | made for you | the secret shared with the console (16 or more characters of `A-Z a-z 0-9 . _ ~ + / = -`). Leave it out and the playbook makes one on the first install, prints it at the end for the console's `CONSOLE_NODE_TOKEN`, and reads it back from the agents on later runs. Set it to choose your own or to change it |
+| `barekube_console_node_name` | string | the inventory name | the name of the node in the console configuration |
+| `barekube_console_port` | number | `9091` | the port of the agent |
+| `barekube_console_operations` | list | by role | what the console may do: any of `reboot`, `standby`, `rejoin`, `poweroff`. Empty means the role default below |
+| `barekube_console_operations_master` | list | `[reboot, standby, rejoin, poweroff]` | the default for masters |
+| `barekube_console_operations_agent` | list | `[reboot, standby, rejoin]` | the default for agents. An agent cannot be allowed to power off |
+| `barekube_console_etcd_metrics_url` | URL | the agent's own | masters: the local etcd metrics endpoint |
+| `barekube_console_api_vip`, `barekube_console_api_gateway` | address | empty | masters: the API virtual IP and the gateway used to find its interface; both enable the cold-start helper |
+| `barekube_console_heartbeat_interval` | duration | `5s` | how often a node reports |
+| `barekube_console_export_dir` | path | `""` | write `config.yaml` and `credentials/<node>` for the console here, from this inventory |
+| `barekube_node_agent_dir` | path | `""` | install the node-agent from this directory (`node-agent-linux-<arch>`) instead of the release (development) |
+
+The permissions of a node follow its operations: a node without `poweroff` gets
+no power-off permission, so a bug in the console or the agent still cannot turn
+it off.
+
+The agents are installed after the cluster is up. The exported configuration has
+the same values the agents got, so the console and the nodes agree. Take the
+agents off with `remove_console_agent.yml`; the cluster is not touched.
+
 ## Timing and retries
 
 | Variable | Type | Default | |
@@ -149,3 +253,5 @@ Not for the inventory: pass them with `-e`.
 | `barekube_node` | `remove_node` | the node to remove, as named in the inventory |
 | `barekube_node_unreachable` | `remove_node` | `true` to skip draining and uninstalling a machine that is gone |
 | `barekube_confirm_uninstall` | `uninstall` | must be `yes`; destroys the cluster |
+
+`remove_console_agent` takes no input; limit it to some nodes with `--limit`.

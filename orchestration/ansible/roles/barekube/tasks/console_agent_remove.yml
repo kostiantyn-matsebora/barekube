@@ -1,0 +1,13 @@
+---
+# Removes the node-agent of the console from the node, with its account, its
+# certificate and its permissions. Nothing else on the node changes.
+- name: Look for the node-agent
+  ansible.builtin.stat:
+    path: /etc/systemd/system/barekube-node-agent.service
+  register: barekube_agent_unit
+
+- name: Remove the node-agent
+  ansible.builtin.command: barekube install node-agent --remove --yes
+  register: barekube_result
+  changed_when: true
+  when: barekube_agent_unit.stat.exists

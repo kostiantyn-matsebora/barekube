@@ -24,7 +24,7 @@ all:
     # ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 
     # --- The cluster ------------------------------------------------------
-    barekube_version: v0.4.1            # the barekube release to install
+    barekube_version: v0.5.0            # the barekube release to install
     barekube_longhorn: true             # Longhorn packages on every node
     barekube_gvisor_default: false      # gVisor as the default RuntimeClass
     barekube_disable: [servicelb, traefik]   # k3s components to turn off (default: [])
@@ -37,8 +37,23 @@ all:
     # --- The barekube CLI -------------------------------------------------
     # barekube_verify_signature: true   # check the Sigstore signature (needs cosign)
     # barekube_cli_path: ""             # install this local file instead of a release
-    # barekube_release_url: https://github.com/kostiantyn-matsebora/barekube/releases/download/v0.4.1
+    # barekube_release_url: https://github.com/kostiantyn-matsebora/barekube/releases/download/v0.5.0
     # barekube_signer_identity: <regex of the release workflow>   # see INVENTORY.md
+
+    # --- The console agents (optional, off by default) ----------------------
+    # Lets the barekube console manage the nodes. The minimum is these two (the token the agents share with the console is made and printed):
+    # barekube_console_agent: true
+    # barekube_console_address: http://192.168.1.5:8080   # where the console runs
+    # barekube_console_node_token: ""   # optional, 16+ characters; made and printed when not set
+    #
+    # Nothing is needed per node. The role comes from the group, and the defaults
+    # follow it: port 9091; operations reboot, standby, rejoin and poweroff on a
+    # master, without poweroff on an agent. Override only deliberately, on `all`,
+    # on a group (masters: vars: / agents: vars:) or on one host:
+    #   192.168.1.5: { barekube_console_port: 9199, barekube_console_operations: [reboot, standby] }
+    # barekube_console_agent can also be set on a group or one host: enable it on
+    # all and put `barekube_console_agent: false` on a host to leave it out.
+    # barekube_console_export_dir: ./console-config   # write config.yaml and credentials/ for the console
 
     # --- Timing and retries -----------------------------------------------
     # barekube_ready_timeout: 300       # seconds to wait for a node to be Ready

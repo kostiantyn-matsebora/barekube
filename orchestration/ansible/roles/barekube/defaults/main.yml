@@ -2,7 +2,7 @@
 # --- The barekube CLI -------------------------------------------------------
 # The release to install. Always a tag, never a branch. It is the release this
 # playbook was published with: the release workflow refuses a tag that differs.
-barekube_version: v0.4.1
+barekube_version: v0.5.0
 # Where the releases live.
 barekube_release_url: "https://github.com/kostiantyn-matsebora/barekube/releases/download/{{ barekube_version }}"
 # Check the Sigstore signature of the release (needs cosign on this machine).
@@ -65,3 +65,55 @@ barekube_install_retry_delay: 10
 # Show the output of the join commands. They are hidden by default because the
 # join token is in their environment, which verbose Ansible output can print.
 barekube_show_output: false
+
+# --- The console agents (optional) -------------------------------------------
+# The barekube console is a separate web UI that manages the nodes. It talks to
+# a node-agent on every node. Off by default; nothing below is used until
+# barekube_console_agent is true.
+barekube_console_agent: false
+# The secret the console and every node-agent share (the console's
+# CONSOLE_NODE_TOKEN). At least 16 characters from A-Z a-z 0-9 . _ ~ + / = -.
+# Keep it in Ansible Vault or pass it with -e. It is passed to the CLI in the
+# environment, never as an argument, and written only to a file that root reads.
+barekube_console_node_token: ""
+# Where the nodes send their heartbeat: the address of the console, for example
+# http://192.168.1.5:8080.
+barekube_console_address: ""
+barekube_console_heartbeat_interval: 5s
+# Per node, all with defaults; set one on a host, on masters or agents, or on all
+# only to override. The name is the one in the console
+# configuration: letters, digits, dots and dashes.
+barekube_console_node_name: "{{ inventory_hostname }}"
+barekube_console_port: 9091
+# What the console may do with the node, a list of reboot, standby, rejoin and
+# poweroff. Empty means the default of the role of the node, which comes from the
+# group (masters or agents): barekube_console_operations_master or _agent. Set it
+# on a host, a group or all to override. The permissions of the node follow it.
+# An agent cannot be allowed to power off: nothing can power it back on.
+barekube_console_operations: []
+barekube_console_operations_master: [reboot, standby, rejoin, poweroff]
+barekube_console_operations_agent: [reboot, standby, rejoin]
+# The list in force on this node. Not for the inventory.
+barekube_console_effective_operations: >-
+  {{ barekube_console_operations if barekube_console_operations | length > 0
+  else barekube_console_operations_master if inventory_hostname in groups['masters']
+  else barekube_console_operations_agent }}
+# Masters only: the local etcd metrics endpoint (empty: the agent's default).
+barekube_console_etcd_metrics_url: ""
+# Masters only: the API virtual IP and the gateway used to find its interface.
+# Both enable the cold-start helper that the console can start.
+barekube_console_api_vip: ""
+barekube_console_api_gateway: ""
+# When set, the play writes the console configuration for this inventory on this
+# machine: <dir>/config.yaml and <dir>/credentials/<node name> (the pinned
+# certificate fingerprint of each node).
+barekube_console_export_dir: ""
+# Install the node-agent from this directory (files node-agent-linux-amd64,
+# -arm64 and -arm) instead of downloading the release (development).
+barekube_node_agent_dir: ""
+# The file name suffix of the node-agent for each machine architecture.
+barekube_node_agent_arches:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: arm
+  armv6l: arm

@@ -1,0 +1,67 @@
+---
+# Writes the console configuration of this inventory on this machine: the nodes
+# with their roles, ports and operations, and the pinned certificate fingerprint
+# of each node-agent, for the hosts that have an agent only. The console reads them as /config/config.yaml and
+# /secrets/node-agent. Nothing in them is secret.
+# Every node describes itself, with the same resolved values the agent was
+# installed with, so overrides at any level reach the file.
+- name: Describe this node
+  ansible.builtin.set_fact:
+    barekube_console_node:
+      name: "{{ barekube_console_node_name }}"
+      ip: "{{ barekube_address }}"
+      role: "{{ 'master' if inventory_hostname in groups['masters'] else 'agent' }}"
+      nodeAgentPort: "{{ barekube_console_port | int }}"
+      operations: "{{ barekube_console_effective_operations }}"
+
+- name: Remember the API address of this node
+  ansible.builtin.set_fact:
+    barekube_console_vip: "{{ barekube_console_api_vip if inventory_hostname in groups['masters'] else '' }}"
+
+- name: Write the console configuration
+  run_once: true
+  delegate_to: localhost
+  vars:
+    ansible_become: false
+    barekube_console_all_nodes: >-
+      {{ (groups['masters'] | intersect(ansible_play_hosts_all))
+      + ((groups['agents'] | default([])) | intersect(ansible_play_hosts_all)) }}
+    barekube_console_vips: >-
+      {{ barekube_console_all_nodes | map('extract', hostvars, 'barekube_console_vip')
+      | select | list }}
+    barekube_console_config:
+      nodeAgent:
+        mock: false
+        credentialsDir: /secrets/node-agent
+      listenAddr: ":8080"
+      nodes: "{{ barekube_console_nodes }}"
+  block:
+    - name: Collect the nodes
+      ansible.builtin.set_fact:
+        barekube_console_nodes: "{{ barekube_console_all_nodes | map('extract', hostvars, 'barekube_console_node') | list }}"
+
+    - name: Make the export directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ barekube_console_export_dir }}"
+        - "{{ barekube_console_export_dir }}/credentials"
+
+    - name: Write config.yaml
+      ansible.builtin.copy:
+        dest: "{{ barekube_console_export_dir }}/config.yaml"
+        mode: "0644"
+        content: |
+          # Written by the barekube playbook from the inventory. Run it again to update.
+          {{ barekube_console_config | combine(
+               {'platform': {'vip': barekube_console_vips | first}} if barekube_console_vips | length > 0 else {}
+             ) | to_nice_yaml(indent=2) }}
+
+    - name: Write the certificate fingerprints
+      ansible.builtin.copy:
+        dest: "{{ barekube_console_export_dir }}/credentials/{{ hostvars[item].barekube_console_node.name }}"
+        content: "{{ hostvars[item].barekube_fingerprint }}\n"
+        mode: "0644"
+      loop: "{{ barekube_console_all_nodes }}"

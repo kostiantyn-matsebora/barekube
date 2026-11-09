@@ -16,7 +16,7 @@ Build, change and remove a bare-metal Kubernetes cluster from an inventory:
 
 Part of [barekube](https://github.com/kostiantyn-matsebora/barekube), the low-level foundation of a bare-metal Kubernetes platform for home setups, IoT and Edge. [Source](https://github.com/kostiantyn-matsebora/barekube) | [Issues](https://github.com/kostiantyn-matsebora/barekube/issues) | [Releases](https://github.com/kostiantyn-matsebora/barekube/releases)
 
-Playbooks: `site` (build), `remove_node`, `uninstall`. Two ways to get them:
+Playbooks: `site` (build), `remove_node`, `uninstall`, `remove_console_agent`. Two ways to get them:
 
 ## A. Release archive
 
@@ -40,7 +40,7 @@ ansible-galaxy collection install kostiantyn_matsebora.barekube
 ansible-playbook -i inventory.yml kostiantyn_matsebora.barekube.site
 ```
 
-- Pin a version: `requirements.yml` with `name: kostiantyn_matsebora.barekube`, `version: "0.4.1"`
+- Pin a version: `requirements.yml` with `name: kostiantyn_matsebora.barekube`, `version: "0.5.0"`
 - Without Galaxy: `ansible-galaxy collection install kostiantyn_matsebora-barekube-<version>.tar.gz` (attached to the release)
 - Playbooks: `site`, `remove_node`, `uninstall`
 
@@ -86,6 +86,7 @@ All optional, set in the inventory.
 | `barekube_extra_args` | empty | extra k3s server arguments |
 | `barekube_kubeconfig` | `~/.kube/config` | where the cluster is added, as context `barekube-default` |
 | `barekube_cluster_name` | `default` | context name: `barekube-<name>` |
+| `barekube_console_agent` | `false` | install the node-agent of the optional [console](../../console/README.md); needs `barekube_console_address`; the shared token is made and printed unless you set `barekube_console_node_token`, see [INVENTORY.md](INVENTORY.md#the-console-agents) |
 | `barekube_install_attempts` | `4` | tries per install command; the wait doubles after each failure |
 | `barekube_install_retry_delay` | `10` | seconds to wait after the first failure |
 
