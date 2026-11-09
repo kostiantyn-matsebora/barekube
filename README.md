@@ -1,6 +1,7 @@
 # Barekube - bare-metal kubernetes platform
 
 [![CLI tests](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/cli-tests.yml/badge.svg?branch=master)](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/cli-tests.yml)
+[![Console tests](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/console-tests.yml/badge.svg?branch=master)](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/console-tests.yml)
 [![E2E cluster](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/e2e.yml/badge.svg?branch=master)](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/e2e.yml)
 [![Release](https://img.shields.io/github/v/release/kostiantyn-matsebora/barekube)](https://github.com/kostiantyn-matsebora/barekube/releases/latest)
 [![Galaxy](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgalaxy.ansible.com%2Fapi%2Fv3%2Fplugin%2Fansible%2Fcontent%2Fpublished%2Fcollections%2Findex%2Fkostiantyn_matsebora%2Fbarekube%2F&query=%24.highest_version.version&label=Galaxy&prefix=v&color=blue&logo=ansible)](https://galaxy.ansible.com/ui/repo/published/kostiantyn_matsebora/barekube/)
@@ -21,6 +22,8 @@ What barekube brings:
 - <img src="assets/icons/gvisor.svg" width="20" height="20" align="top"> [gVisor](https://gvisor.dev/) - security layer for running containers efficiently and securely.
 - <img src="assets/icons/longhorn.svg" width="20" height="20" align="top"> [Longhorn](https://longhorn.io/) storage prerequisites on the nodes.
 - <img src="assets/icons/ansible.svg" width="20" height="20" align="top"> [Ansible](https://www.ansible.com/) playbooks that build, change and remove a whole cluster from an inventory.
+
+And, if you want it, a handsome web UI to manage the nodes: the [console](#optional-the-console), from a Docker image, with a small agent on each node. Off by default.
 
 Everything above that (HA API endpoint, load balancing, ingress, ...) is up to your platform.
 
@@ -73,6 +76,41 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
    ```
 
 Add machines or change settings: run step 3 again. [More](orchestration/ansible/README.md). One node by hand: [use the CLI on each node](#using-the-cli).
+
+## Optional: the console
+
+A web UI for the cluster, drawn in the picture above as the optional band. It reboots, stands by,
+powers off and rejoins nodes, and shuts the whole cluster down and starts it again, each as a
+workflow that moves only on what it sees. It is released with barekube, as a Docker image and
+as a small **node-agent** that runs on every node. Nothing installs it unless you ask.
+
+1. Add the node-agents to the inventory of step 2 above and run the playbook again.
+   Nothing else is needed: the playbook makes the token the agents share with the console and
+   prints it at the end. A host can override each setting:
+
+   ```yaml
+   all:
+     vars:
+       barekube_console_agent: true                       # default false
+       barekube_console_address: http://192.168.1.5:8080   # where the console will run
+       barekube_console_export_dir: console/deploy/config  # writes the console configuration for you
+       # barekube_console_node_token: ...                  # optional: choose the token yourself
+   ```
+
+   Without Ansible, on each node: `CONSOLE_NODE_TOKEN=... barekube install node-agent --console-addr http://192.168.1.5:8080 --yes`.
+
+2. Start the console, on a machine that stays up when the cluster does, with the token from step 1:
+
+   ```shell
+   cd console/deploy        # from a checkout of this repository
+   CONSOLE_NODE_TOKEN=<the printed token> ./generate-tokens.sh   # .env, with a random UI token
+   docker compose up -d
+   ```
+
+3. Sign in with `CONSOLE_UI_TOKEN` from `.env`.
+
+The agent runs as an unprivileged account with a fixed list of permissions and exposes
+fixed endpoints, never "run this command". More in [console/README.md](console/README.md).
 
 ## Using the CLI
 
@@ -153,6 +191,7 @@ Commands:
   install master-node             Install and configure another k3s master node
   install agent-node              Install and configure k3s agent node
   install gvisor                  Install and configure gVisor for existing k3s node
+  install node-agent              Install the node-agent that lets the optional barekube console manage this node
   install longhorn-dependencies   Install and configure Longhorn storage dependencies
   k3s
   k3s start                       Start k3s master node
