@@ -96,17 +96,17 @@
 <rect x="777.2" y="645" width="22" height="6" rx="3" fill="#6ee7b7"/><rect x="777.2" y="655" width="22" height="6" rx="3" fill="#6ee7b7" fill-opacity="0.5"/>
 <circle cx="902.0" cy="650" r="4" fill="#6ee7b7"/>
 <text x="809.2" y="658" font-size="13" font-weight="700" fill="#f1f5f9">agent-n</text>
-<path d="M497.0 760 V716 H485 L500 696 L515 716 H503.0 V760 Z" fill="#818cf8"/>
-<text x="524" y="733" font-size="12" fill="#818cf8" font-weight="600">manages, over HTTPS with a pinned certificate</text>
-<rect x="60" y="762" width="880" height="96" rx="16" fill="#161b22" fill-opacity="0.7" stroke="#6e7681" stroke-width="1.5" stroke-dasharray="7 6"/>
-<text x="80" y="788" font-size="13" font-weight="700" letter-spacing="1.5" fill="#8b949e">OPTIONAL: BAREKUBE CONSOLE</text>
-<text x="920" y="788" text-anchor="end" font-size="12" fill="#6e7681" font-style="italic">Docker image, compose file, off by default</text>
-<rect x="80" y="798" width="100" height="38" rx="19" fill="#21262d" stroke="#30363d"/>
-<text x="130.0" y="822" text-anchor="middle" font-size="13" fill="#9da5b4">Web UI</text>
-<rect x="192" y="798" width="212" height="38" rx="19" fill="#21262d" stroke="#30363d"/>
-<text x="298.0" y="822" text-anchor="middle" font-size="13" fill="#9da5b4">Reboot, stand by, power off</text>
-<rect x="416" y="798" width="190" height="38" rx="19" fill="#21262d" stroke="#30363d"/>
-<text x="511.0" y="822" text-anchor="middle" font-size="13" fill="#9da5b4">Cluster shutdown and start</text>
-<rect x="618" y="798" width="190" height="38" rx="19" fill="#21262d" stroke="#30363d"/>
-<text x="713.0" y="822" text-anchor="middle" font-size="13" fill="#9da5b4">node-agent on every node</text>
+<path d="M497.0 760 V716 H485 L500 696 L515 716 H503.0 V760 Z" fill="#2dd4bf"/>
+<text x="524" y="733" font-size="12" fill="#2dd4bf" font-weight="600">manages, over HTTPS with a pinned certificate</text>
+<rect x="60" y="762" width="880" height="96" rx="16" fill="#0f1f1e" fill-opacity="0.9" stroke="#14b8a6" stroke-width="2" stroke-dasharray="7 6"/>
+<text x="80" y="788" font-size="13" font-weight="700" letter-spacing="1.5" fill="#2dd4bf">OPTIONAL: BAREKUBE CONSOLE</text>
+<text x="920" y="788" text-anchor="end" font-size="12" fill="#5eead4" font-style="italic">Docker image, compose file, off by default</text>
+<rect x="80" y="798" width="100" height="38" rx="19" fill="#134e4a" stroke="#0f766e"/>
+<text x="130.0" y="822" text-anchor="middle" font-size="13" fill="#99f6e4">Web UI</text>
+<rect x="192" y="798" width="212" height="38" rx="19" fill="#134e4a" stroke="#0f766e"/>
+<text x="298.0" y="822" text-anchor="middle" font-size="13" fill="#99f6e4">Reboot, stand by, power off</text>
+<rect x="416" y="798" width="190" height="38" rx="19" fill="#134e4a" stroke="#0f766e"/>
+<text x="511.0" y="822" text-anchor="middle" font-size="13" fill="#99f6e4">Cluster shutdown and start</text>
+<rect x="618" y="798" width="190" height="38" rx="19" fill="#134e4a" stroke="#0f766e"/>
+<text x="713.0" y="822" text-anchor="middle" font-size="13" fill="#99f6e4">node-agent on every node</text>
 </svg>

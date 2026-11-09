@@ -22,8 +22,7 @@ What barekube brings:
 - <img src="assets/icons/gvisor.svg" width="20" height="20" align="top"> [gVisor](https://gvisor.dev/) - security layer for running containers efficiently and securely.
 - <img src="assets/icons/longhorn.svg" width="20" height="20" align="top"> [Longhorn](https://longhorn.io/) storage prerequisites on the nodes.
 - <img src="assets/icons/ansible.svg" width="20" height="20" align="top"> [Ansible](https://www.ansible.com/) playbooks that build, change and remove a whole cluster from an inventory.
-
-And, if you want it, a handsome web UI to manage the nodes: the [console](#optional-the-console), from a Docker image, with a small agent on each node. Off by default.
+- Optional: a web UI for the nodes, the [console](console/README.md), with a small agent on each node.
 
 Everything above that (HA API endpoint, load balancing, ingress, ...) is up to your platform.
 
@@ -50,6 +49,9 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
 
        barekube_disable: [servicelb, traefik]   # k3s components to turn off (default: [])
        barekube_tls_san: []                     # extra API server certificate names (default: [])
+
+       # barekube_console_agent: true                       # optional: agents for the console, step 5
+       # barekube_console_address: http://192.168.1.5:8080  # where the console runs
    ```
 
 3. Build the cluster, one of two ways (log in with a password instead of a key: add `-k`):
@@ -75,42 +77,9 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
    kubectl get nodes
    ```
 
+5. Optional: manage the nodes with the [console](console/README.md), a web UI for rebooting, standing by and shutting down nodes or the whole cluster. Uncomment the two `barekube_console_*` lines in the inventory, run step 3 again (it prints the token the agents share with the console), then start the console with Docker Compose. [How](console/README.md#install)
+
 Add machines or change settings: run step 3 again. [More](orchestration/ansible/README.md). One node by hand: [use the CLI on each node](#using-the-cli).
-
-## Optional: the console
-
-A web UI for the cluster, drawn in the picture above as the optional band. It reboots, stands by,
-powers off and rejoins nodes, and shuts the whole cluster down and starts it again, each as a
-workflow that moves only on what it sees. It is released with barekube, as a Docker image and
-as a small **node-agent** that runs on every node. Nothing installs it unless you ask.
-
-1. Add the node-agents to the inventory of step 2 above and run the playbook again.
-   Nothing else is needed: the playbook makes the token the agents share with the console and
-   prints it at the end. A host can override each setting:
-
-   ```yaml
-   all:
-     vars:
-       barekube_console_agent: true                       # default false
-       barekube_console_address: http://192.168.1.5:8080   # where the console will run
-       barekube_console_export_dir: console/deploy/config  # writes the console configuration for you
-       # barekube_console_node_token: ...                  # optional: choose the token yourself
-   ```
-
-   Without Ansible, on each node: `CONSOLE_NODE_TOKEN=... barekube install node-agent --console-addr http://192.168.1.5:8080 --yes`.
-
-2. Start the console, on a machine that stays up when the cluster does, with the token from step 1:
-
-   ```shell
-   cd console/deploy        # from a checkout of this repository
-   CONSOLE_NODE_TOKEN=<the printed token> ./generate-tokens.sh   # .env, with a random UI token
-   docker compose up -d
-   ```
-
-3. Sign in with `CONSOLE_UI_TOKEN` from `.env`.
-
-The agent runs as an unprivileged account with a fixed list of permissions and exposes
-fixed endpoints, never "run this command". More in [console/README.md](console/README.md).
 
 ## Using the CLI
 
@@ -221,6 +190,8 @@ export K3S_TOKEN='<token from the first master>'   # not a flag: stays out of ps
 barekube install initial-master --yes --tls-san k8s.home.lan --disable traefik
 barekube install master-node --yes --server https://192.168.1.10:6443
 barekube install agent-node  --yes --server https://192.168.1.10:6443
+
+CONSOLE_NODE_TOKEN='<shared token>' barekube install node-agent --yes --console-addr http://192.168.1.5:8080   # optional, for the console
 ```
 
 `--yes` skips the questions. Each command ends with `installed`, `updated` or `already installed`. Run again on an installed server with changed `--tls-san`, `--disable` or `--extra-args`, and k3s is reconfigured and restarted (`updated`); with the same ones, nothing happens.
