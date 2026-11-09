@@ -7,7 +7,10 @@
 - Shut the whole cluster down in the right order, and start it again after the nodes are powered on.
 - Every operation is a workflow that moves only on what it observes, never on a timer.
 
-![The console during a reboot of a node: the nodes, the run with its live workflow graph and the event log](docs/images/console.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/console-dark.png">
+  <img src="docs/images/console-light.png" alt="The console during a reboot of a node: the nodes, the run with its live workflow graph and the event log">
+</picture>
 
 ```
 browser ──► console (Docker) ──HTTPS, pinned certificate, token──► node-agent on every node
