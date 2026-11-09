@@ -1,0 +1,17 @@
+# Local dev config: pure mock mode, no real process, no real node — fastest
+# iteration loop for the orchestrator/state-machine/UI logic itself. For a
+# more realistic test against a real (local) node-agent process, see
+# config.demo.yaml instead.
+#
+# Run with:
+#   go run ./cmd/console -config config.local.yaml
+nodeAgent:
+  mock: true
+
+listenAddr: ":8080"
+
+nodes:
+  - name: lima-rancher-desktop
+    ip: 127.0.0.1
+    role: master
+    nodeAgentPort: 9091

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>barekube console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%20fill%3D%22none%22%20stroke%3D%22%232f9fd0%22%20stroke-width%3D%222%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M16%203%2028%209.5v13L16%2029%204%2022.5v-13z%22/%3E%3Cpath%20d%3D%22M4%209.5%2016%2016l12-6.5M16%2016v13%22/%3E%3Cpath%20d%3D%22M16%2016%2028%209.5v13L16%2029z%22%20fill%3D%22%232f9fd0%22%20stroke%3D%22none%22%20opacity%3D%22.9%22/%3E%3C/svg%3E">
+<style>
+:root{--bg:#0e1116;--panel:#161b22;--panel2:#1c232c;--line:#2a323d;--fg:#e6edf3;--mut:#8b98a5;--acc:#38bdf8;
+--ok:#3fb950;--warn:#d29922;--bad:#f85149;--off:#6e7681;--r:10px}
+@media (prefers-color-scheme:light){:root{--bg:#f4f6f8;--panel:#fff;--panel2:#eef1f4;--line:#d5dbe1;--fg:#16202a;--mut:#5b6773;--acc:#0b7fb3;--ok:#1a7f37;--warn:#9a6700;--bad:#cf222e;--off:#6e7781}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line);padding-top:max(10px,env(safe-area-inset-top))}
+header h1{font-size:16px;margin:0;display:flex;align-items:center;gap:9px;font-weight:500;color:var(--mut)}
+header h1 span{color:var(--fg);font-weight:700;letter-spacing:.01em}
+.logo{width:26px;height:26px;flex:none;color:var(--fg)}
+.sum{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.pill{padding:2px 9px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);font-size:12px;color:var(--mut);white-space:nowrap}
+.pill b{color:var(--fg)}
+button{font:inherit;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-height:44px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--acc)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.danger{border-color:var(--bad);color:var(--bad)}
+button.danger.armed{background:var(--bad);color:#fff}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:12px;padding:12px;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+.col{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0;overflow:auto}
+.col>.card{flex:none}
+.col>.card.grow{flex:1 0 auto}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-height:0}
+.card>h2{margin:0;padding:10px 14px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.scroll{overflow:auto;min-height:0;flex:1}
+table{width:100%;border-collapse:collapse}
+th,td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;background:var(--panel)}
+tr:last-child td{border-bottom:0}
+.chip{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid currentColor}
+.s-ok{color:var(--ok)}.s-partial,.s-vip-down{color:var(--warn)}.s-down,.s-deadlock{color:var(--bad)}.s-healthy{color:var(--ok)}.s-cordoned,.s-unknown{color:var(--warn)}.s-not-ready{color:var(--bad)}.s-stood-by{color:var(--acc)}.s-off{color:var(--off)}
+.yes{color:var(--ok)}.no{color:var(--bad)}.unknown{color:var(--mut)}
+.tabs{display:flex;gap:4px;padding:6px 14px 0;background:var(--panel);border-bottom:1px solid var(--line)}
+.tab{background:none;border:0;border-bottom:3px solid transparent;border-radius:0;padding:8px 14px;color:var(--mut);font-weight:600}
+.tab.on{color:var(--fg);border-bottom-color:var(--acc)}
+[hidden]{display:none!important}
+.pill.p-ok{color:var(--ok);border-color:var(--ok)}.pill.p-warn{color:var(--warn);border-color:var(--warn)}.pill.p-bad{color:var(--bad);border-color:var(--bad)}
+.pill.link{cursor:pointer}
+.pill .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:6px}
+.pc{display:grid;grid-template-columns:110px 90px 1fr;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);align-items:center}
+.pc .d{color:var(--mut);font-size:13px}
+.pnote{padding:12px 14px;color:var(--mut);font-size:13px}
+.pact{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px}
+.run{font-size:12px;color:var(--mut)}
+.run b{color:var(--fg)}
+.cards{display:none}
+.ncard{padding:12px 14px;border-bottom:1px solid var(--line)}
+.ncard:last-child{border-bottom:0}
+.ncard .top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.ncard .facts{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--mut);font-size:12px;margin-bottom:8px}
+.runs .r{padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.runs .r.sel{background:var(--panel2);box-shadow:inset 3px 0 var(--acc)}
+.runs .r small{color:var(--mut)}
+.f-completed{color:var(--ok)}.f-failed,.f-refused{color:var(--bad)}.f-live{color:var(--acc)}
+#graph{padding:8px;overflow:auto;flex:1;min-height:0}
+.runcard{flex:1 1 auto!important;min-height:300px}
+#graph svg{width:100%!important;max-width:100%!important;height:auto}
+#graph .node.cur rect,#graph .node.cur polygon,#graph .node.cur path{stroke:var(--acc)!important;stroke-width:4px!important;filter:drop-shadow(0 0 6px var(--acc))}
+.rail{display:none;flex-wrap:wrap;gap:4px;padding:10px 14px;align-items:center}
+.rail span{padding:2px 8px;border-radius:6px;background:var(--panel2);font-size:12px;color:var(--mut)}
+.rail span.cur{background:var(--acc);color:#001018;font-weight:700}
+.log{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.log div{padding:3px 14px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:62px 110px 1fr;gap:8px}
+.log time{color:var(--mut)}
+.log .k{color:var(--acc);overflow:hidden;text-overflow:ellipsis}
+.log .k.run\.failed,.log .k.action\.failed,.log .k.run\.refused,.log .k.timeout\.fired,.log .k.node\.unreachable{color:var(--bad)}
+.log .k.run\.completed,.log .k.node\.reachable,.log .k.node\.ready{color:var(--ok)}
+.log .d{word-break:break-word}.log .d i{color:var(--mut);font-style:normal}
+.filter{font-size:12px;color:var(--acc);cursor:pointer;text-transform:none;letter-spacing:0}
+dialog{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:14px;padding:0;width:min(420px,calc(100vw - 24px))}
+dialog::backdrop{background:#0009}
+dialog h3{margin:0;padding:14px 16px;border-bottom:1px solid var(--line);font-size:15px}
+dialog .opts{display:flex;flex-direction:column;gap:8px;padding:12px 16px 16px}
+dialog .opts button{text-align:left}
+.empty{padding:18px 14px;color:var(--mut)}
+@media (max-width:700px){
+.pc{grid-template-columns:1fr auto}.pc .d{grid-column:1 / -1}
+body{overflow:auto}
+main{grid-template-columns:1fr;display:flex;flex-direction:column;overflow:visible}
+.table{display:none}.cards{display:block}
+.col{min-height:auto}
+#graph{display:none}.rail{display:flex}.runcard{flex:none!important;min-height:0}
+.log{max-height:60vh}
+.log div{grid-template-columns:52px 1fr}
+.log .k{grid-column:2}.log .d{grid-column:1 / -1}
+header{flex-wrap:wrap}
+.sum{order:3;flex-basis:100%}
+header h1{flex:1}
+.col{display:contents}
+.col>.card{order:0}
+.col>#nodescard{order:1}.col>#runscard{order:2}.col>.runcard{order:3}.col>#logcard{order:4}
+dialog{position:fixed;bottom:0;margin:0 auto;border-radius:16px 16px 0 0;width:100vw;max-width:100vw}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M16 3 28 9.5v13L16 29 4 22.5v-13z"/><path d="M4 9.5 16 16l12-6.5M16 16v13"/><path d="M16 16 28 9.5v13L16 29z" fill="var(--acc,#3b82f6)" stroke="none" opacity=".9"/></svg><span>barekube</span> console</h1>
+  <div class="sum" id="sum"></div>
+  <button id="clusterstart" title="Rejoin every node after they are powered on">Start cluster</button>
+  <button class="danger" id="shutdown">Shut down cluster</button>
+</header>
+<nav class="tabs" id="tabs">
+  <button class="tab on" data-tab="cluster">Cluster</button>
+  <button class="tab" data-tab="platform" id="platformtab" hidden>Platform</button>
+</nav>
+<main>
+  <div class="col">
+    <section class="card" id="platformcard" hidden>
+      <h2>Platform <span class="filter" id="platformstate"></span></h2>
+      <div id="platformbody"></div>
+    </section>
+    <section class="card" id="nodescard">
+      <h2>Nodes</h2>
+      <div class="scroll">
+        <table class="table"><thead><tr>
+          <th>Node</th><th>Role</th><th>State</th><th>Reachable</th><th>k3s</th><th>Ready</th><th>Schedulable</th><th>Seen</th><th>Workflow</th><th>Status</th><th></th>
+        </tr></thead><tbody id="rows"></tbody></table>
+        <div class="cards" id="cards"></div>
+      </div>
+    </section>
+    <section class="card" id="runscard">
+      <h2>Runs <span class="filter" id="clearsel" hidden>show all events</span></h2>
+      <div class="runs scroll" id="runs" style="max-height:190px;flex:none"></div>
+    </section>
+    <section class="card grow" id="logcard" style="flex:1 1 0;min-height:180px">
+      <h2>Event log <span class="filter" id="logscope"></span></h2>
+      <div class="log scroll" id="log"></div>
+    </section>
+  </div>
+  <div class="col">
+    <section class="card runcard">
+      <h2>Run graph <span class="filter" id="graphname"></span></h2>
+      <div class="rail" id="rail"></div>
+      <div id="graph"><div class="empty">Select a run to see its graph.</div></div>
+    </section>
+  </div>
+</main>
+<dialog id="sheet"><h3 id="sheett"></h3><div class="opts" id="opts"></div></dialog>
+<script src="/static/mermaid.min.js"></script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let nodes=[],runs=[],selected=null,workflows={},svgCache={},evts=[],lastId=0,scope={},tab="cluster",platform={shown:false};
+const OPS={reboot:["Reboot","Force reboot"],standby:["Stand by","Force stand by"],poweroff:["Power off","Force power off"],rejoin:["Rejoin",null]};
+
+function ago(t){if(!t)return"never";const s=Math.max(0,(Date.now()-new Date(t))/1000);return s<90?Math.round(s)+"s":s<5400?Math.round(s/60)+"m":Math.round(s/3600)+"h"}
+function tri(v){return '<span class="'+esc(v)+'">'+esc(v)+'</span>'}
+function sched(n){return n.cordoned==="yes"?tri("no"):n.cordoned==="no"?tri("yes"):tri("unknown")}
+function runCell(n){const r=n.run;if(!r)return'<span class="run">idle</span>';
+  const cls=r.terminal?"f-"+r.final:"f-live";
+  return '<span class="run"><b>'+esc(r.workflow)+'</b> <span class="'+cls+'">'+esc(r.status)+'</span></span>'}
+function wfCell(n){return n.run?'<b>'+esc(n.run.workflow)+'</b>':'<span class="run">idle</span>'}
+function stCell(n){const r=n.run;return r?'<span class="'+(r.terminal?"f-"+r.final:"f-live")+'">'+esc(r.status)+'</span>':'<span class="run">-</span>'}
+function busy(n){return n.run&&!n.run.terminal}
+
+async function api(path,opt){const r=await fetch(path,opt);if(r.status===401){location="/login";throw 0}return r}
+async function post(path){const r=await api(path,{method:"POST"});if(!r.ok){alert(await r.text())}poll()}
+
+function openSheet(n){
+  $("sheett").textContent=n.name;
+  const box=$("opts");box.innerHTML="";
+  for(const op of ["reboot","standby","poweroff","rejoin"]){
+    if(!n.operations.includes(op))continue;
+    OPS[op].forEach((label,i)=>{if(!label)return;
+      const b=document.createElement("button");b.textContent=label;b.disabled=busy(n);
+      b.onclick=()=>{ $("sheet").close();
+        if(confirm(label+" "+n.name+"?"))post("/api/nodes/"+encodeURIComponent(n.name)+"/"+op+"?mode="+(i===1?"force":"graceful"))};
+      box.appendChild(b)})}
+  $("sheet").showModal()}
+$("sheet").addEventListener("click",e=>{if(e.target===$("sheet"))$("sheet").close()});
+
+let armed=0;
+$("shutdown").onclick=()=>{
+  if(!armed){armed=setTimeout(()=>{armed=0;$("shutdown").classList.remove("armed");$("shutdown").textContent="Shut down cluster"},4000);
+    $("shutdown").classList.add("armed");$("shutdown").textContent="Tap again to confirm";return}
+  clearTimeout(armed);armed=0;$("shutdown").classList.remove("armed");$("shutdown").textContent="Shut down cluster";
+  post("/api/cluster/shutdown")};
+
+$("clusterstart").onclick=()=>{ if(confirm("Start the cluster? The nodes must already be powered on."))post("/api/cluster/start")};
+
+function renderNodes(){
+  const rows=[],cards=[];
+  for(const n of nodes){
+    const chip='<span class="chip s-'+esc(n.state)+'">'+esc(n.state)+'</span>';
+    rows.push('<tr><td><b>'+esc(n.name)+'</b></td><td>'+esc(n.role)+'</td><td>'+chip+'</td><td>'+tri(n.reachable)+'</td><td>'+tri(n.k3s)+'</td><td>'+tri(n.ready)+'</td><td>'+sched(n)+'</td><td>'+ago(n.heartbeat||n.observedAt)+'</td><td>'+wfCell(n)+'</td><td>'+stCell(n)+'</td><td><button data-n="'+esc(n.name)+'">Actions</button></td></tr>');
+    cards.push('<div class="ncard"><div class="top"><b>'+esc(n.name)+' <small style="color:var(--mut);font-weight:400">'+esc(n.role)+'</small></b>'+chip+'</div><div class="facts"><span>reachable '+tri(n.reachable)+'</span><span>k3s '+tri(n.k3s)+'</span><span>ready '+tri(n.ready)+'</span><span>schedulable '+sched(n)+'</span><span>seen '+ago(n.heartbeat||n.observedAt)+'</span></div><div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+runCell(n)+'<button data-n="'+esc(n.name)+'">Actions</button></div></div>')}
+  $("rows").innerHTML=rows.join("");$("cards").innerHTML=cards.join("");
+  document.querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>openSheet(nodes.find(x=>x.name===b.dataset.n)));
+  renderSummary()}
+
+// The status bar: the whole ecosystem at a glance. The cluster is the nodes, the
+// platform is what runs on them (Cilium, kube-vip). A node can be Ready while
+// the platform under it is down, so they are two pills, not one.
+function renderSummary(){
+  const total=nodes.length,healthy=nodes.filter(n=>n.state==="healthy").length;
+  const other={};nodes.filter(n=>n.state!=="healthy").forEach(n=>other[n.state]=(other[n.state]||0)+1);
+  const cls=!total?"":healthy===total?"p-ok":healthy===0?"p-bad":"p-warn";
+  let h='<span class="pill link '+cls+'" data-go="cluster" title="the nodes"><span class="dot"></span>cluster <b>'+healthy+'/'+total+'</b> healthy'
+    +Object.keys(other).map(k=>' · '+other[k]+' '+esc(k)).join("")+'</span>';
+  if(platform.shown){
+    const pc={ok:"p-ok",partial:"p-warn","vip-down":"p-warn",unknown:"",down:"p-bad",deadlock:"p-bad"}[platform.state]||"";
+    h+='<span class="pill link '+pc+'" data-go="platform" title="'+esc(platform.detail||"")+'"><span class="dot"></span>platform <b>'+esc(platform.state)+'</b></span>'}
+  const live=runs.filter(r=>!r.terminal).length;
+  if(live)h+='<span class="pill"><b>'+live+'</b> running</span>';
+  $("sum").innerHTML=h;
+  document.querySelectorAll("[data-go]").forEach(e=>e.onclick=()=>setTab(e.dataset.go))}
+
+function renderPlatform(){
+  $("platformtab").hidden=!platform.shown;
+  if(!platform.shown&&tab==="platform"){setTab("cluster");return}
+  if(!platform.shown)return;
+  $("platformstate").innerHTML='<span class="chip s-'+esc(platform.state)+'">'+esc(platform.state)+'</span>';
+  const rows=(platform.components||[]).map(c=>'<div class="pc"><b>'+esc(c.name)+'</b><span><span class="chip s-'+esc(c.state)+'">'+esc(c.state)+'</span></span><span class="d">'+esc(c.detail)+'</span></div>').join("");
+  const r=platform.run;
+  const last=r?'<span class="run">last restore: <b>'+esc(r.status)+'</b> · '+ago(r.startedAt)+(r.reason?' · '+esc(r.reason):"")+'</span>':"";
+  $("platformbody").innerHTML=(rows||'<div class="empty">'+esc(platform.detail||"")+'</div>')
+    +'<div class="pnote">'+esc(platform.detail||"")+'. Nodes can be Ready while this layer is down: after a full power-off Cilium waits for the API VIP and kube-vip waits for Cilium.</div>'
+    +'<div class="pact"><button id="vipbtn"'+(platform.canRestore?"":" disabled")+'>Restore API VIP</button>'+last
+    +(platform.vip?"":'<span class="run">no platform.vip in the console config</span>')+'</div>';
+  const b=$("vipbtn");if(b)b.onclick=()=>{if(confirm("Restore the API VIP"+(platform.vip?" "+platform.vip:"")+"? It is only touched if Cilium and kube-vip are proven to be waiting on each other."))post("/api/platform/vip-restore")}}
+
+// Tabs filter what is shown, not what runs: a run belongs to the layer it acts on.
+function layerOf(r){return r.workflow==="vip-restore"?"platform":"cluster"}
+function setTab(t){
+  tab=t;selected=null;scope=t==="platform"?{workflow:"vip-restore"}:{};lastId=0;evts=[];drawn=-1;
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
+  $("nodescard").hidden=t!=="cluster";$("platformcard").hidden=t!=="platform"||!platform.shown;
+  $("clusterstart").hidden=t!=="cluster";$("shutdown").hidden=t!=="cluster";
+  $("graph").dataset.wf="";$("graph").innerHTML='<div class="empty">Select a run to see its graph.</div>';
+  renderRuns();renderPlatform();poll()}
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+
+function renderRuns(){
+  const vis=runs.filter(r=>layerOf(r)===tab);
+  if(!vis.some(r=>r.runId===selected))selected=vis.length?(vis.find(r=>!r.terminal)||vis[0]).runId:null;
+  $("runs").innerHTML=vis.length?vis.map(r=>'<div class="r'+(r.runId===selected?" sel":"")+'" data-r="'+esc(r.runId)+'"><span><b>'+esc(r.workflow)+'</b> '+esc(r.node||(tab==="platform"?"platform":"cluster"))+' <small>'+esc(r.mode||"")+' · '+esc(r.by||"")+' · '+ago(r.startedAt)+'</small></span><span class="'+(r.terminal?"f-"+r.final:"f-live")+'">'+esc(r.status)+'</span></div>').join(""):'<div class="empty">'+(tab==="platform"?"No platform runs yet.":"No runs yet. Pick an action on a node.")+'</div>';
+  document.querySelectorAll("[data-r]").forEach(e=>e.onclick=()=>{selected=e.dataset.r;scope={run:selected};lastId=0;evts=[];renderRuns();poll()});
+  const r=vis.find(x=>x.runId===selected);
+  if(r){drawGraph(r);drawRail(r);$("graphname").textContent=r.workflow+" · "+(r.node||(tab==="platform"?"platform":"cluster"))}
+}
+
+function visited(r){
+  const path=["Started"];
+  for(const e of evts){if(e.runId===r.runId&&e.kind==="run.status"){const to=(e.detail||"").split(" -> ")[1];if(to)path.push(to)}}
+  return path}
+function drawRail(r){$("rail").innerHTML=visited(r).map((s,i,a)=>'<span class="'+(s===r.status?"cur":"")+'">'+esc(s)+'</span>').join(" › ")}
+
+async function drawGraph(r){
+  const wf=workflows[r.workflow];if(!wf||!window.mermaid)return;
+  if(!svgCache[r.workflow]){
+    const dark=!matchMedia("(prefers-color-scheme: light)").matches;
+    mermaid.initialize({startOnLoad:false,securityLevel:"strict",theme:dark?"dark":"default",flowchart:{curve:"basis",htmlLabels:true}});
+    try{svgCache[r.workflow]=(await mermaid.render("g-"+r.workflow,wf)).svg}catch(e){svgCache[r.workflow]='<div class="empty">diagram failed: '+esc(e.message)+'</div>'}}
+  const g=$("graph");
+  if(g.dataset.wf!==r.workflow){g.innerHTML=svgCache[r.workflow];g.dataset.wf=r.workflow}
+  g.querySelectorAll(".node.cur").forEach(e=>e.classList.remove("cur"));
+  const cur=g.querySelector('[id^="flowchart-'+r.status+'-"]');
+  if(cur){cur.classList.add("cur");
+    if(g.dataset.cur!==r.runId+r.status){g.dataset.cur=r.runId+r.status;
+      const gb=g.getBoundingClientRect(),cb=cur.getBoundingClientRect();
+      g.scrollTop+=cb.top-gb.top-gb.height/2+cb.height/2}}}
+
+let pinned=true,drawn=-1;
+$("log").addEventListener("scroll",()=>{const el=$("log");pinned=el.scrollTop+el.clientHeight>=el.scrollHeight-40});
+function renderLog(){
+  $("logscope").textContent=scope.run?"run "+scope.run.slice(0,8)+" · show all":"";
+  $("logscope").onclick=()=>{scope={};lastId=0;evts=[];drawn=-1;poll()};
+  if(drawn===lastId)return;
+  drawn=lastId;
+  const el=$("log");
+  el.innerHTML=evts.map(e=>'<div><time>'+new Date(e.time).toLocaleTimeString([], {hour12:false})+'</time><span class="k '+esc(e.kind)+'">'+esc(e.kind)+'</span><span class="d">'+(e.node?'<i>'+esc(e.node)+'</i> ':"")+esc(e.detail||"")+'</span></div>').join("");
+  if(pinned)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight})}
+
+async function poll(){
+  try{
+    const q=new URLSearchParams(scope);q.set("after",lastId);
+    const [n,r,e,p]=await Promise.all([api("/api/nodes"),api("/api/runs"),api("/api/events?"+q),api("/api/platform")]);
+    nodes=await n.json();runs=await r.json();platform=await p.json();const ne=await e.json();
+    if(ne.length){evts=evts.concat(ne).slice(-1500);lastId=ne[ne.length-1].id}
+    renderNodes();renderPlatform();renderRuns();renderLog()
+  }catch(x){if(x!==0)console.error(x)}}
+
+(async()=>{
+  const w=await (await api("/api/workflows")).json();w.forEach(x=>workflows[x.name]=x.mermaid);
+  await poll();setInterval(poll,1000)})();
+</script>
+</body>
+</html>
