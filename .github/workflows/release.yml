@@ -127,7 +127,10 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: console/go.mod
+          # go.mod names the minimum (1.26.0). Build with the newest patch of 1.26: it has the
+          # standard library security fixes that govulncheck looks for.
+          go-version: "1.26"
+          check-latest: true
           cache-dependency-path: console/go.sum
 
       # The node-agent runs on every node, whatever its CPU: the same three
