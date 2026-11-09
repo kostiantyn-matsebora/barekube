@@ -136,7 +136,7 @@ Plain Ansible variables, set on `all`, a group or a host.
 ## The console agents
 
 Optional and off by default. The [console](../../console/README.md) is the control plane UI of the cluster
-that manages the nodes through a small agent on each one. To use it, set three
+that manages the nodes through a small agent on each one. To use it, set two
 variables; every other one has a default.
 
 ```yaml

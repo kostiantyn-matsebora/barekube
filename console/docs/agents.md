@@ -30,59 +30,9 @@ All nodes share one secret, the **node token**. The console needs the same value
 
 ### With Ansible
 
-Add to the inventory, in `all: vars:` (or on a group or a host, to override):
-
-```yaml
-all:
-  vars:
-    barekube_console_agent: true                       # default false
-    barekube_console_address: http://192.168.1.5:8080  # where the console will run
-    barekube_console_export_dir: console/deploy/config # optional: writes the console configuration (step 2)
-    # barekube_console_node_token: ...                 # optional: choose the node token yourself
-```
-
-Run the playbook as for the cluster (`site.yml`). It downloads and verifies the node-agent (checksum and
-Sigstore signature), installs it on every node that has `barekube_console_agent: true`, and at the end
-**prints the node token** it made. Write it down: step 2 needs it. Run again and it reads the token back from
-the agents, so it stays the same and is not printed again. To choose it yourself, set
-`barekube_console_node_token` (16 or more characters of `A-Z a-z 0-9 . _ ~ + / = -`, best from Ansible Vault).
-
-Everything per node has a default, so nothing else is needed. The role comes from the group a host is in
-(`masters` or `agents`). To override, put the variable on a host, a group or `all`; the most specific wins:
-
-```yaml
-all:
-  children:
-    masters:
-      hosts:
-        192.168.1.10:
-        192.168.1.15:
-          barekube_console_port: 9199              # only this node's agent listens here
-          barekube_console_operations: [reboot, standby]   # and may only do these
-    agents:
-      hosts:
-        192.168.1.50:
-        192.168.1.30:
-          barekube_console_agent: false            # no agent on this node
-      vars:
-        barekube_console_operations: [reboot, standby, rejoin]
-```
-
-| Variable | Default | |
-|---|---|---|
-| `barekube_console_agent` | `false` | install the agent on the node |
-| `barekube_console_address` | required | the console's address, where the nodes send heartbeats |
-| `barekube_console_node_token` | made for you | the shared secret |
-| `barekube_console_node_name` | the inventory name | the node's name in the console |
-| `barekube_console_port` | `9091` | the port of the agent |
-| `barekube_console_operations` | by role | any of `reboot`, `standby`, `rejoin`, `poweroff`. Masters: all four. Agents: without `poweroff` |
-| `barekube_console_heartbeat_interval` | `5s` | how often the node reports |
-| `barekube_console_etcd_metrics_url` | the agent's default | masters: local etcd metrics, for the leader probe |
-| `barekube_console_api_vip`, `barekube_console_api_gateway` | empty | masters: enable the cold-start helper, see [Platform](reference.md#platform-cilium-kube-vip-the-api-vip) |
-| `barekube_console_export_dir` | empty | where to write the console configuration |
-
-The whole list, with examples: [INVENTORY.md](../../orchestration/ansible/INVENTORY.md#the-console-agents). To take the
-agents off again: `ansible-playbook -i inventory.yml remove_console_agent.yml`.
+Set `barekube_console_agent: true` and `barekube_console_address` in the inventory and run the playbook; it prints the node token.
+Every setting, per-node overrides and examples: [Console agents in the Ansible README](../../orchestration/ansible/README.md#console-agents-optional).
+To take the agents off: `ansible-playbook -i inventory.yml remove_console_agent.yml`.
 
 ### With the CLI
 

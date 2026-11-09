@@ -7,6 +7,8 @@
 - Shut the whole cluster down in the right order, and start it again after the nodes are powered on.
 - Every operation is a workflow that moves only on what it observes, never on a timer.
 
+![The console during a reboot of a node: the nodes, the run with its live workflow graph and the event log](docs/images/console.png)
+
 ```
 browser ──► console (Docker) ──HTTPS, pinned certificate, token──► node-agent on every node
 ```
@@ -36,8 +38,8 @@ Without Ansible, on each node, with a token you made (`openssl rand -hex 24`):
 CONSOLE_NODE_TOKEN=<token> barekube install node-agent --yes --console-addr http://192.168.1.5:8080
 ```
 
-Ports, node names and what the console may do with a node all have defaults and can be overridden:
-[all settings](docs/agents.md).
+All settings, with per-node overrides: [Console agents in the Ansible README](../orchestration/ansible/README.md#console-agents-optional).
+The CLI options: [docs/agents.md](docs/agents.md#with-the-cli).
 
 ### 2. Start the console
 
@@ -61,7 +63,8 @@ The UI has no TLS of its own: keep it on a trusted network or behind your own pr
 
 ## More
 
-- [Every Ansible variable and CLI option, the configuration, upgrading](docs/agents.md)
+- [All inventory settings](../orchestration/ansible/README.md#console-agents-optional)
+- [CLI options, the configuration by hand, upgrading](docs/agents.md)
 - [What a node-agent is allowed to do](docs/agents.md#what-a-node-agent-is-allowed)
 - [How it works: workflows, state, secrets](docs/reference.md)
 - [Workflow design](docs/workflows.md)
