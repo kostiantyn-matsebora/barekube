@@ -1,6 +1,6 @@
 # console
 
-The optional web UI and control plane of a barekube cluster. It runs from a Docker
+The optional control plane of a barekube cluster, with a web UI. It runs from a Docker
 image on any machine that outlives the cluster, and manages the nodes through a small
 **node-agent** that barekube installs on each of them.
 Its own web UI is the only way in, apart from one narrow automation route.

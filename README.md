@@ -22,7 +22,7 @@ What barekube brings:
 - <img src="assets/icons/gvisor.svg" width="20" height="20" align="top"> [gVisor](https://gvisor.dev/) - security layer for running containers efficiently and securely.
 - <img src="assets/icons/longhorn.svg" width="20" height="20" align="top"> [Longhorn](https://longhorn.io/) storage prerequisites on the nodes.
 - <img src="assets/icons/ansible.svg" width="20" height="20" align="top"> [Ansible](https://www.ansible.com/) playbooks that build, change and remove a whole cluster from an inventory.
-- Optional: a web UI for the nodes, the [console](console/README.md), with a small agent on each node.
+- Optional: the [console](console/README.md), a control plane UI for the cluster, with a small agent on each node.
 
 Everything above that (HA API endpoint, load balancing, ingress, ...) is up to your platform.
 
@@ -77,7 +77,7 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
    kubectl get nodes
    ```
 
-5. Optional: manage the nodes with the [console](console/README.md), a web UI for rebooting, standing by and shutting down nodes or the whole cluster. Uncomment the two `barekube_console_*` lines in the inventory, run step 3 again (it prints the token the agents share with the console), then start the console with Docker Compose. [How](console/README.md#install)
+5. Optional: add the [console](console/README.md), the control plane UI of the cluster. Enable the agents in the inventory, run step 3 again and start the console with Docker Compose: [how](console/README.md#install).
 
 Add machines or change settings: run step 3 again. [More](orchestration/ansible/README.md). One node by hand: [use the CLI on each node](#using-the-cli).
 
