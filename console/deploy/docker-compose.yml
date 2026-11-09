@@ -6,7 +6,7 @@
 #   docker compose up -d
 #
 # config/ is written by the Ansible playbooks when barekube_console_export_dir
-# points to it; see ../README.md for writing it by hand. The UI is on port 8080:
+# points to it; see ../docs/agents.md for writing it by hand. The UI is on port 8080:
 # put it behind your own TLS proxy or keep it on a trusted network.
 services:
   console:
