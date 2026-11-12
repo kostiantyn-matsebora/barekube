@@ -16,7 +16,7 @@ Build, change and remove a bare-metal Kubernetes cluster from an inventory:
 
 Part of [barekube](https://github.com/kostiantyn-matsebora/barekube), the low-level foundation of a bare-metal Kubernetes platform for home setups, IoT and Edge. [Source](https://github.com/kostiantyn-matsebora/barekube) | [Issues](https://github.com/kostiantyn-matsebora/barekube/issues) | [Releases](https://github.com/kostiantyn-matsebora/barekube/releases)
 
-Playbooks: `site` (build), `remove_node`, `uninstall`. Two ways to get them:
+Playbooks: `site` (build), `remove_node`, `uninstall`, `remove_console_agent`. Two ways to get them:
 
 ## A. Release archive
 
@@ -40,7 +40,7 @@ ansible-galaxy collection install kostiantyn_matsebora.barekube
 ansible-playbook -i inventory.yml kostiantyn_matsebora.barekube.site
 ```
 
-- Pin a version: `requirements.yml` with `name: kostiantyn_matsebora.barekube`, `version: "0.4.1"`
+- Pin a version: `requirements.yml` with `name: kostiantyn_matsebora.barekube`, `version: "0.5.0"`
 - Without Galaxy: `ansible-galaxy collection install kostiantyn_matsebora-barekube-<version>.tar.gz` (attached to the release)
 - Playbooks: `site`, `remove_node`, `uninstall`
 
@@ -86,10 +86,60 @@ All optional, set in the inventory.
 | `barekube_extra_args` | empty | extra k3s server arguments |
 | `barekube_kubeconfig` | `~/.kube/config` | where the cluster is added, as context `barekube-default` |
 | `barekube_cluster_name` | `default` | context name: `barekube-<name>` |
+| `barekube_console_agent` | `false` | install the agents of the optional [console](../../console/README.md), see [Console agents](#console-agents-optional) |
 | `barekube_install_attempts` | `4` | tries per install command; the wait doubles after each failure |
 | `barekube_install_retry_delay` | `10` | seconds to wait after the first failure |
 
 More settings, with types: [INVENTORY.md](INVENTORY.md).
+
+## Console agents (optional)
+
+Off by default. Installs a small agent on the nodes, so the [console](../../console/README.md) can manage them. Two settings turn it on, everything else has a default:
+
+```yaml
+all:
+  vars:
+    barekube_console_agent: true                        # default false
+    barekube_console_address: http://192.168.1.5:8080   # where the console will run
+```
+
+Run the playbook. The agents share a token with the console: the playbook makes one on the first run and **prints it** at the end (give it to the console as `CONSOLE_NODE_TOKEN`), then reads it back from the agents on later runs. To choose your own, set `barekube_console_node_token`.
+
+Nothing is needed per node. A node's role comes from its group and its defaults follow the role. To override, set the variable on `all`, on a group (`masters` or `agents`) or on one host, where the most specific wins. `barekube_console_agent` itself works the same way:
+
+```yaml
+all:
+  children:
+    masters:
+      hosts:
+        192.168.1.10:
+        192.168.1.15:
+          barekube_console_port: 9199                        # this node only
+          barekube_console_operations: [reboot, standby]     # and it may only do these
+    agents:
+      hosts:
+        192.168.1.50:
+        192.168.1.30:
+          barekube_console_agent: false                      # no agent on this node
+  vars:
+    barekube_console_agent: true
+    barekube_console_address: http://192.168.1.5:8080
+```
+
+| Variable | Default | |
+|---|---|---|
+| `barekube_console_agent` | `false` | install the agent on the node |
+| `barekube_console_address` | required | the console's address, where the nodes send heartbeats |
+| `barekube_console_node_token` | made for you | the shared secret: 16 or more characters of `A-Z a-z 0-9 . _ ~ + / = -`; best from Ansible Vault |
+| `barekube_console_node_name` | the inventory name | the node's name in the console |
+| `barekube_console_port` | `9091` | the port of the agent |
+| `barekube_console_operations` | by role | what the console may do with the node: `reboot`, `standby`, `rejoin`, `poweroff`. Masters: all four. Agents: without `poweroff` |
+| `barekube_console_heartbeat_interval` | `5s` | how often the node reports |
+| `barekube_console_etcd_metrics_url` | the agent's own | masters: the local etcd metrics endpoint |
+| `barekube_console_api_vip`, `barekube_console_api_gateway` | empty | masters: the API virtual IP and the gateway that finds its interface; both enable the cold-start helper |
+| `barekube_console_export_dir` | empty | write the console's `config.yaml` and the nodes' certificate fingerprints here, from this inventory |
+
+Take the agents off with `ansible-playbook -i inventory.yml remove_console_agent.yml` (the cluster is not touched). Types and details: [INVENTORY.md](INVENTORY.md#the-console-agents).
 
 ## Logging in
 

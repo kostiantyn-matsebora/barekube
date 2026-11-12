@@ -1,1 +1,8 @@
 .ansible/
+
+# console
+console/console
+console/node-agent
+console/config.yaml
+console/deploy/.env
+console/deploy/config/

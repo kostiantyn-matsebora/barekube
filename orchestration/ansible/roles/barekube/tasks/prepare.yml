@@ -88,3 +88,28 @@
     DEBIAN_FRONTEND: noninteractive
   changed_when: false
   when: barekube_longhorn | bool
+
+- name: Check the console agent settings
+  ansible.builtin.assert:
+    that:
+      - barekube_console_node_token is string
+      - barekube_console_node_token | length >= 16
+      - barekube_console_node_token is match('^[A-Za-z0-9._~+/=-]+$')
+      - barekube_console_address is match('^https?://[A-Za-z0-9.-]+(:[0-9]+)?$')
+      - barekube_console_node_name is match('^[A-Za-z0-9.-]+$')
+      - barekube_console_port | int > 0 and barekube_console_port | int < 65536
+      - barekube_console_heartbeat_interval is match('^[0-9]+(ms|s|m|h)$')
+      - barekube_console_operations is sequence and barekube_console_operations is not string
+      - barekube_console_effective_operations | length > 0
+      - barekube_console_effective_operations | difference(['reboot', 'standby', 'rejoin', 'poweroff']) | length == 0
+      - barekube_console_effective_operations | unique | length == barekube_console_effective_operations | length
+      - inventory_hostname in groups['masters'] or 'poweroff' not in barekube_console_effective_operations
+    fail_msg: >-
+      With barekube_console_agent, set barekube_console_address (http://host:8080). A
+      barekube_console_node_token you set has 16 or more characters of A-Z a-z 0-9 . _ ~ + / = -;
+      without one, a token is made.
+      A node name has only letters, digits, dots and dashes. barekube_console_operations is a list of
+      reboot, standby, rejoin and poweroff, and an agent cannot be allowed to poweroff.
+    quiet: true
+  no_log: true
+  when: barekube_console_agent | bool

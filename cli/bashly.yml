@@ -1,7 +1,7 @@
 name: barekube
 extensible: true
 help: CLI that provides functionality for installing and configuring bare kubernetes based on k3s and gVisor.
-version: 0.4.1
+version: 0.5.0
 
 x_markdown_footer: |-
       # ISSUE TRACKER
@@ -93,6 +93,52 @@ commands:
           help: Stop making gVisor the default for pods that name no RuntimeClass
           conflicts: [--default]
 
+    - name: node-agent
+      help: Install the node-agent that lets the optional barekube console manage this node
+      flags:
+        - long: --console-addr
+          arg: url
+          help: Address of the console that receives the heartbeats, for example http://192.168.1.5:8080
+        - long: --node-name
+          arg: name
+          help: Name of this node in the console configuration (the host name by default)
+        - long: --heartbeat-interval
+          arg: duration
+          default: 5s
+          help: How often the node reports to the console
+        - long: --port
+          arg: port
+          default: "9091"
+          help: Port the node-agent listens on (nodeAgentPort of the node in the console configuration)
+        - long: --operations
+          arg: list
+          help: |-
+            Operations the console may start on this node, separated by commas:
+            reboot, standby, rejoin, poweroff. Default: all on a master, all
+            but poweroff on an agent. The node's permissions follow this list.
+        - long: --etcd-metrics-url
+          arg: url
+          help: Masters only. Local etcd metrics endpoint, for the leader probe (default http://127.0.0.1:2381/metrics)
+        - long: --api-vip
+          arg: address
+          help: Masters only. The API virtual IP, which enables the cold-start helper
+        - long: --api-gateway
+          arg: address
+          help: Gateway used to find the interface of the API virtual IP (with --api-vip)
+        - long: --binary
+          arg: file
+          help: Install this node-agent file instead of downloading the release
+        - long: --skip-signature-check
+          help: Verify the checksum only. By default the Sigstore signature is verified too, which needs cosign.
+        - long: --remove
+          help: Remove the node-agent from this node
+        - long: --yes
+          short: -y
+          help: Do not prompt; fail when a required value is missing
+      environment_variables:
+        - name: CONSOLE_NODE_TOKEN
+          help: Token shared by the console and every node-agent (prompted for when unset)
+
     - name: longhorn-dependencies
       help: Install and configure Longhorn storage dependencies
 
@@ -128,6 +174,7 @@ commands:
   - barekube install master-node --server https://10.0.0.1:6443 --disable traefik   # on an installed node: applies changed arguments
   - barekube install master-node
   - barekube install agent-node --reinstall
+  - CONSOLE_NODE_TOKEN=... barekube install node-agent --console-addr http://192.168.1.5:8080 --yes
 
 - name: upgrade
   help: Upgrade barekube CLI to the latest verified release

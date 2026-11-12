@@ -167,3 +167,74 @@ parallel_nodes() {
 
 # last_line: the last non-empty line of stdin, colours removed.
 last_line() { sed 's/\x1b\[[0-9;]*m//g' | awk 'NF { line = $0 } END { print line }'; }
+
+# --- The optional console and its node agents --------------------------------
+# With E2E_CONSOLE=true the console runs on the runner, and four of the five
+# nodes get the node-agent (agent-1 is left without one on purpose, to prove
+# that a node can opt out). master-2 overrides the defaults of its role: another
+# port and no power-off. The role of a node always comes from its group.
+CONSOLE="${E2E_CONSOLE:-false}"
+console_enabled() { [[ "$CONSOLE" == "true" ]]; }
+CONSOLE_DIR="$STATE_DIR/console"
+CONSOLE_CONFIG_DIR="$CONSOLE_DIR/config"
+CONSOLE_PORT=8080
+CONSOLE_NO_AGENT=agent-1
+CONSOLE_OVERRIDE_NODE=master-2
+CONSOLE_OVERRIDE_PORT=9199
+CONSOLE_OVERRIDE_OPERATIONS="reboot,standby,rejoin"
+CONSOLE_NODES=()
+for n in "${NODES[@]}"; do [[ "$n" == "$CONSOLE_NO_AGENT" ]] || CONSOLE_NODES+=("$n"); done
+
+# The address of the runner as the nodes see it: the LXD bridge.
+console_host_ip() { lxc network get lxdbr0 ipv4.address | cut -d/ -f1; }
+console_url() { echo "http://$(console_host_ip):$CONSOLE_PORT"; }
+
+console_node_port() { [[ "$1" == "$CONSOLE_OVERRIDE_NODE" ]] && echo "$CONSOLE_OVERRIDE_PORT" || echo 9091; }
+
+console_node_operations() {
+  if [[ "$1" == "$CONSOLE_OVERRIDE_NODE" ]]; then echo "$CONSOLE_OVERRIDE_OPERATIONS"
+  elif [[ " ${MASTERS[*]} " == *" $1 "* ]]; then echo reboot,standby,rejoin,poweroff
+  else echo reboot,standby,rejoin; fi
+}
+
+console_has_poweroff() { [[ ",$(console_node_operations "$1")," == *,poweroff,* ]]; }
+console_is_master() { [[ " ${MASTERS[*]} " == *" $1 "* ]]; }
+
+# The two secrets, made once. They are random, long, and different.
+console_tokens() {
+  mkdir -p "$CONSOLE_DIR"
+  [[ -f "$CONSOLE_DIR/node-token" ]] || { openssl rand -hex 24 >"$CONSOLE_DIR/node-token"; openssl rand -hex 24 >"$CONSOLE_DIR/ui-token"; chmod 600 "$CONSOLE_DIR"/*-token; }
+  CONSOLE_NODE_TOKEN="$(<"$CONSOLE_DIR/node-token")"
+  CONSOLE_UI_TOKEN="$(<"$CONSOLE_DIR/ui-token")"
+  echo "::add-mask::$CONSOLE_NODE_TOKEN"
+  echo "::add-mask::$CONSOLE_UI_TOKEN"
+}
+
+# Starts the console of this checkout (built by console.sh) unless it runs.
+console_start() {
+  console_tokens
+  if [[ -f "$CONSOLE_DIR/console.pid" ]] && kill -0 "$(<"$CONSOLE_DIR/console.pid")" 2>/dev/null; then return 0; fi
+  (
+    cd "$CONSOLE_DIR"
+    CONSOLE_NODE_TOKEN="$CONSOLE_NODE_TOKEN" CONSOLE_UI_TOKEN="$CONSOLE_UI_TOKEN" \
+      CONSOLE_DB="$CONSOLE_DIR/console.db" \
+      setsid nohup "$CONSOLE_DIR/bin/console" -config "$CONSOLE_DIR/config.yaml" >>"$STATE_DIR/logs/console.log" 2>&1 &
+    echo $! >"$CONSOLE_DIR/console.pid"
+  )
+  wait_for 60 "the console answers" curl -fsS -o /dev/null "http://127.0.0.1:$CONSOLE_PORT/login"
+}
+
+# console_api PATH [CURL ARGS...]: a call as a logged-in user of the UI.
+console_api() {
+  local jar="$CONSOLE_DIR/cookies" path="$1"
+  shift
+  [[ -s "$jar" ]] || curl -fsS -c "$jar" -o /dev/null -d "token=$CONSOLE_UI_TOKEN" "http://127.0.0.1:$CONSOLE_PORT/login"
+  curl -fsS -b "$jar" "$@" "http://127.0.0.1:$CONSOLE_PORT$path"
+}
+
+# The arguments that install the agent on a node, as the script provisioner and
+# the idempotence check use them.
+console_install_flags() {
+  echo --yes --console-addr "$(console_url)" --node-name "$1" --port "$(console_node_port "$1")" \
+    --operations "$(console_node_operations "$1")"
+}

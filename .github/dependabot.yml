@@ -7,3 +7,14 @@ updates:
     groups:
       actions:
         update-types: [minor, patch]
+  - package-ecosystem: gomod
+    directory: /console
+    schedule:
+      interval: weekly
+    groups:
+      go:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /console
+    schedule:
+      interval: weekly

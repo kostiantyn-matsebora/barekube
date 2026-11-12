@@ -1,0 +1,124 @@
+# The console configuration. Copy it to config.yaml and list your nodes.
+#
+# With the Ansible playbooks, set barekube_console_export_dir and this file (and
+# the certificate fingerprints below) is written for you from the inventory.
+#
+# No Kubernetes credential is needed. The node-agent on each master runs
+# `k3s kubectl` with that master's own kubeconfig, so the console holds none.
+# Masters are tried in order and the next one is used if one is unreachable.
+#
+# Three secrets come from the environment, never from this file, and each opens
+# one door (see README.md): CONSOLE_UI_TOKEN (the UI), CONSOLE_NODE_TOKEN (the
+# node-agents, the same value `barekube install node-agent` is given) and the
+# optional CONSOLE_AUTOMATION_TOKEN (starting workflows from other systems).
+nodeAgent:
+  mock: false
+  credentialsDir: /secrets/node-agent   # one file per node (the fingerprint `barekube install node-agent` prints): "<node>" -> cert fingerprint SHA-256 only
+
+listenAddr: ":8080"
+
+# One entry per node. name is --node-name of `barekube install node-agent`,
+# nodeAgentPort its --port and operations its --operations.
+# "operations" lists which actions the console may start on the node. It is not
+# inferred from the role. Leave "poweroff" out for a node that cannot be powered
+# on remotely: the console then never switches it off, and `barekube install
+# node-agent --operations` gives the node the same list, so its permissions
+# agree. Rejoin after a manual power-on is the whole story for such a node.
+nodes:
+  - name: master-1
+    ip: 192.168.1.11
+    role: master
+    nodeAgentPort: 9091
+    operations: [reboot, standby, rejoin, poweroff]
+  - name: master-2
+    ip: 192.168.1.12
+    role: master
+    nodeAgentPort: 9091
+    operations: [reboot, standby, rejoin, poweroff]
+  - name: master-3
+    ip: 192.168.1.13
+    role: master
+    nodeAgentPort: 9091
+    operations: [reboot, standby, rejoin, poweroff]
+  - name: agent-1
+    ip: 192.168.1.21
+    role: agent
+    nodeAgentPort: 9091
+    operations: [reboot, standby, rejoin]
+  - name: agent-2
+    ip: 192.168.1.22
+    role: agent
+    nodeAgentPort: 9091
+    operations: [reboot, standby, rejoin]
+
+# --- Optional tuning. Everything below has a default, shown here. -----------
+#
+# Every wait in a workflow has a deadline. A deadline is the only thing that
+# moves a run when the node never reports the event it waits for.
+timing:
+  nodeDown: 2m        # reboot: node-agent must go unreachable
+  nodeUp: 5m          # reboot, rejoin: node reachable and Ready again
+  k3sInactive: 1m     # k3s stop or kill: unit reports inactive
+  k3sActive: 1m       # rejoin: unit reports active
+  uncordoned: 30s     # node schedulable again after uncordon
+  gracefulOff: 90s    # graceful poweroff, before it is forced
+  forcedOff: 2m       # forced poweroff
+  clearance: 10m      # cluster shutdown: how long a master waits to be released
+  drain: 2m           # graceful drain cap
+  forceDrain: 20s     # force drain cap
+  observeFast: 2s     # observer interval while any run is active
+  observeSlow: 5s     # observer interval at rest
+  settle: 15s         # a stopped k3s must stay stopped this long, systemd restarts a killed unit after 5s
+
+# Where state lives. Everything the page shows is kept here, not in memory.
+# path must be on a volume that outlives the container. In the Docker image
+# /config is that volume.
+storage:
+  path: /config/console.db
+  retention: 24h      # finished runs, events and timeouts older than this are deleted hourly
+
+# What POST /api/cluster/shutdown does. The cluster workflow bypasses the
+# etcd-quorum gate and the zero-replica-risk gate on purpose: losing quorum is
+# the goal. A single node run never bypasses them.
+clusterShutdown:
+  snapshot: true      # save a local etcd snapshot first, best effort, never blocks the shutdown
+  cordonAll: true     # cordon every node first, so nothing reschedules mid-shutdown
+  agents:
+    action: standby   # agents stop k3s, the machine stays on
+    mode: force
+  masters:
+    action: poweroff
+    mode: graceful
+    forceAfter: 90s   # a graceful poweroff turns into poweroff --force after this
+    leaderLast: true  # the etcd leader goes last, so quorum lasts as long as it can
+  waits:
+    agents: 3m
+    mastersDrained: 5m
+    masterDown: 4m
+
+# What POST /api/cluster/start does, for a cluster that is fully off and whose
+# nodes the owner has powered on: wait for the masters and an etcd majority,
+# rejoin every node, report. It is about the nodes only. Every phase has a
+# ceiling, not a poll: a cold boot takes minutes, and a phase that passes its
+# ceiling fails the run with the evidence.
+clusterStart:
+  vaultNamespace: vault     # report a sealed Vault; empty skips the check, the console never unseals
+  waits:
+    nodes: 10m              # every master answers; at the ceiling a majority is enough
+    quorum: 5m              # an etcd majority answers
+    rejoin: 15m             # one rejoin phase: one master, or all agents together
+
+# The platform layer: the cluster network (Cilium) and the API virtual IP
+# (kube-vip). It has its own card in the UI and its own workflow, vip-restore
+# (POST /api/platform/vip-restore), and is shown only when Cilium is installed.
+# After a full power-off Cilium reaches the API through the VIP and kube-vip needs
+# Cilium to announce it, so neither starts. vip-restore proves exactly that
+# before touching anything. Leave vip empty if the cluster has none.
+# See docs/workflows.md.
+platform:
+  vip: 192.168.1.100        # the kube-vip API address, Cilium's KUBERNETES_SERVICE_HOST
+  deadlockGrace: 30s        # the deadlock must hold this long before the console acts
+  waits:
+    probe: 10m              # the check reaches a verdict
+    vip: 5m                 # Cilium and kube-vip recover once the bootstrap address is on
+    stable: 1m              # the VIP still answers once the bootstrap address is gone

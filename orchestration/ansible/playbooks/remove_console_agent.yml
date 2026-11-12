@@ -1,0 +1,15 @@
+---
+# Removes the console agent from the nodes: the service, its account, its
+# certificate, its permissions. The cluster is not touched. Limit it to some
+# nodes with --limit.
+#
+#   ansible-playbook -i inventory.yml remove_console_agent.yml
+
+- name: Remove the console agents
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Remove the node-agent
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: console_agent_remove

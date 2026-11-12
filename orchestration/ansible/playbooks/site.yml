@@ -5,6 +5,52 @@
 #
 #   ansible-playbook -i inventory.yml site.yml
 
+# Optional, off by default: the node-agent that the barekube console talks to.
+# barekube_console_agent is decided per host (all, a group or one host), so the
+# hosts that have it are picked out first and the plays below run on them only.
+- name: Find the hosts with a console agent
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Group the hosts by barekube_console_agent
+      ansible.builtin.group_by:
+        key: "barekube_console_agent_{{ barekube_console_agent | default(false) | bool }}"
+      changed_when: false
+
+# The token the console and the agents share. Set barekube_console_node_token to
+# choose it. When it is not set, the nodes that already have an agent are asked
+# for theirs, so running the playbook again keeps it; only a first install makes a
+# new one, and says so at the end.
+- name: Settle the console node token
+  hosts: barekube_console_agent_True
+  gather_facts: false
+  tasks:
+    - name: Read the token of an agent that is already installed
+      ansible.builtin.slurp:
+        src: /etc/barekube-agent/env
+      register: barekube_existing_token
+      failed_when: false
+      changed_when: false
+      no_log: true
+      when: barekube_console_node_token | default('') | length == 0
+
+    - name: Use that token, or make one
+      ansible.builtin.set_fact:
+        barekube_console_token_generated: "{{ barekube_found_tokens | length == 0 }}"
+        barekube_console_node_token: >-
+          {{ barekube_found_tokens | first
+          if barekube_found_tokens | length > 0
+          else lookup('ansible.builtin.password', '/dev/null chars=ascii_letters,digits length=40') }}
+      vars:
+        barekube_found_tokens: >-
+          {{ ansible_play_hosts_all
+          | map('extract', hostvars, 'barekube_existing_token')
+          | selectattr('content', 'defined') | map(attribute='content') | map('b64decode')
+          | map('regex_findall', '(?m)^NODE_AGENT_TOKEN=(.+)$') | flatten | list }}
+      run_once: true
+      no_log: true
+      when: barekube_console_node_token | default('') | length == 0
+
 - name: Prepare every node
   hosts: all
   tasks:
@@ -54,3 +100,36 @@
       ansible.builtin.import_role:
         name: barekube
         tasks_from: kubeconfig
+
+- name: Install the console agents
+  hosts: barekube_console_agent_True
+  tasks:
+    - name: Install the node-agent
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: console_agent
+
+- name: Write the console configuration
+  hosts: barekube_console_agent_True
+  gather_facts: false
+  tasks:
+    - name: Export the configuration for the console
+      ansible.builtin.import_role:
+        name: barekube
+        tasks_from: console_export
+      when: barekube_console_export_dir | length > 0
+
+- name: Say which token the console needs
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Show the token that was made
+      ansible.builtin.debug:
+        msg:
+          - "The console agents were installed with a new node token. Give it to the console as CONSOLE_NODE_TOKEN:"
+          - "{{ hostvars[groups['barekube_console_agent_True'][0]].barekube_console_node_token }}"
+          - "Ansible will use the same token on later runs: it reads it back from the agents. To choose your own, set barekube_console_node_token."
+      when:
+        - groups['barekube_console_agent_True'] | default([]) | length > 0
+        - hostvars[groups['barekube_console_agent_True'][0]].barekube_console_token_generated | default(false) | bool

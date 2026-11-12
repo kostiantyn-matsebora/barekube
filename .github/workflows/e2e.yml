@@ -12,7 +12,7 @@ on:
         description: >-
           Run only the cluster jobs whose label matches this regular expression,
           e.g. "ansible.*full" or "galaxy". The label is
-          "<provisioner> gvisor=<true|false> <inventory>". Empty runs all.
+          "<provisioner> gvisor=<true|false> <inventory>[ console]". Empty runs all.
         required: false
         default: ""
   workflow_call:
@@ -38,21 +38,21 @@ jobs:
           ONLY: ${{ inputs.only }}
         run: |
           all='[
-            {"provisioner":"script","gvisor_default":false},
+            {"provisioner":"script","gvisor_default":false,"console":true},
             {"provisioner":"script","gvisor_default":true},
             {"provisioner":"ansible","gvisor_default":false,"inventory":"minimal"},
-            {"provisioner":"ansible","gvisor_default":false,"inventory":"full"},
+            {"provisioner":"ansible","gvisor_default":false,"inventory":"full","console":true},
             {"provisioner":"ansible","gvisor_default":true,"inventory":"full"},
             {"provisioner":"galaxy","gvisor_default":false,"inventory":"minimal"},
             {"provisioner":"galaxy","gvisor_default":false,"inventory":"full"}
           ]'
           picked="$(jq -c --arg only "$ONLY" '
-            map(select(("\(.provisioner) gvisor=\(.gvisor_default) \(.inventory // "")") | test($only)))' <<<"$all")"
+            map(select(("\(.provisioner) gvisor=\(.gvisor_default) \(.inventory // "")\(if .console then " console" else "" end)") | test($only)))' <<<"$all")"
           [[ "$picked" != "[]" ]] || { echo "::error::nothing matches '$ONLY'"; exit 1; }
           echo "include=$picked" >>"$GITHUB_OUTPUT"
 
   cluster:
-    name: Five-node cluster (${{ matrix.provisioner }}, gVisor default ${{ matrix.gvisor_default }}${{ matrix.inventory && format(', {0} inventory', matrix.inventory) || '' }})
+    name: Five-node cluster (${{ matrix.provisioner }}, gVisor default ${{ matrix.gvisor_default }}${{ matrix.inventory && format(', {0} inventory', matrix.inventory) || '' }}${{ matrix.console && ', with the console' || '' }})
     needs: matrix
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -72,6 +72,8 @@ jobs:
       E2E_PROVISIONER: ${{ matrix.provisioner }}
       E2E_GVISOR_DEFAULT: ${{ matrix.gvisor_default }}
       E2E_INVENTORY: ${{ matrix.inventory }}
+      # The optional console and the node-agents of four of the five nodes.
+      E2E_CONSOLE: ${{ matrix.console }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -107,6 +109,22 @@ jobs:
 
       - name: Build the cluster
         run: cli/tests/e2e/provision.sh
+
+      # Builds the console and the node-agent from this commit, installs the
+      # agents (with the CLI or the playbook, like the cluster) and starts the
+      # console on the runner. Does nothing in the jobs without the console.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: matrix.console
+        with:
+          # go.mod names the minimum (1.26.0). Build with the newest patch of 1.26: it has the
+          # standard library security fixes that govulncheck looks for.
+          go-version: "1.26"
+          check-latest: true
+          cache-dependency-path: console/go.sum
+
+      - name: Add the console
+        if: matrix.console
+        run: cli/tests/e2e/console.sh
 
       - name: Smoke and end-to-end checks
         run: cli/tests/e2e/smoke.sh

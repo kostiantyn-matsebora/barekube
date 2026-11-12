@@ -1,0 +1,138 @@
+name: Console tests
+
+# The optional console (web UI) and the node-agent that runs on each node. Both
+# are one Go module in console/. Called by the CLI tests, so the single
+# ci-green check covers it, and by the release.
+
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - "console/**"
+      - ".github/workflows/console-tests.yml"
+  push:
+    branches: [master]
+    paths:
+      - "console/**"
+      - ".github/workflows/console-tests.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: console-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Go tests, vet and coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          # go.mod names the minimum (1.26.0). Build with the newest patch of 1.26: it has the
+          # standard library security fixes that govulncheck looks for.
+          go-version: "1.26"
+          check-latest: true
+          cache-dependency-path: console/go.sum
+
+      - name: Formatting
+        working-directory: console
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: Vet
+        working-directory: console
+        run: go vet ./...
+
+      # Tests with the race detector; every package under internal/ needs 85 %.
+      - name: Test with coverage
+        run: console/coverage.sh
+
+      - name: Dependencies have no known vulnerabilities
+        working-directory: console
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
+  build:
+    name: Binaries build for every architecture
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goarch: [amd64, arm64, arm]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          # go.mod names the minimum (1.26.0). Build with the newest patch of 1.26: it has the
+          # standard library security fixes that govulncheck looks for.
+          go-version: "1.26"
+          check-latest: true
+          cache-dependency-path: console/go.sum
+      - name: Build the node-agent and the console
+        working-directory: console
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -trimpath -o /dev/null ./cmd/node-agent
+          go build -trimpath -o /dev/null ./cmd/console
+
+  image:
+    name: The Docker image builds and starts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the image
+        run: docker build --tag barekube-console:test console
+
+      # The compose file the README tells users to run, with the image just built.
+      - name: The compose file is valid and refuses to start without tokens
+        working-directory: console/deploy
+        run: |
+          CONSOLE_UI_TOKEN=a CONSOLE_NODE_TOKEN=b docker compose config --quiet
+          if docker compose config --quiet 2>/dev/null; then
+            echo "compose accepted a missing token" >&2
+            exit 1
+          fi
+
+      - name: Run it through the compose file with a generated .env
+        working-directory: console/deploy
+        env:
+          CONSOLE_IMAGE: barekube-console
+          CONSOLE_VERSION: test
+        run: |
+          ./generate-tokens.sh
+          [ "$(stat -c %a .env)" = 600 ]
+          # A real (not mock) configuration with one node, so the node token is live.
+          mkdir -p config/credentials
+          cat >config/config.yaml <<'EOF'
+          nodeAgent:
+            mock: false
+            credentialsDir: /secrets/node-agent
+          listenAddr: ":8080"
+          nodes:
+            - name: master-1
+              ip: 127.0.0.1
+              role: master
+              nodeAgentPort: 9091
+              operations: [reboot, standby, rejoin, poweroff]
+          EOF
+          printf '%064d\n' 0 >config/credentials/master-1
+          docker compose up -d
+          # The same checks that run against the real console in the cluster test.
+          ./check-running.sh http://localhost:8080 \
+            "$(sed -n 's/^CONSOLE_UI_TOKEN=//p' .env)" "$(sed -n 's/^CONSOLE_NODE_TOKEN=//p' .env)" master-1 \
+            || { docker compose logs; exit 1; }
+          # An unprivileged user on a read-only root file system.
+          docker inspect --format '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}}' "$(docker compose ps -q console)" \
+            | tee /dev/stderr | grep -q '^true \[ALL\]'
+          docker compose down --volumes

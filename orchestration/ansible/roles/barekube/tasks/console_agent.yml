@@ -1,0 +1,129 @@
+---
+# Installs the node-agent of the barekube console on a node. The binary is
+# downloaded and verified once per architecture on this machine, like the CLI,
+# and copied to the nodes. Run on every node with facts gathered.
+
+- name: Check there is a node-agent for the architecture of this node
+  ansible.builtin.assert:
+    that: ansible_facts['architecture'] in barekube_node_agent_arches
+    fail_msg: "There is no node-agent for the architecture {{ ansible_facts['architecture'] }}."
+    quiet: true
+
+- name: Work out the node-agent file of this node
+  ansible.builtin.set_fact:
+    barekube_agent_arch: "{{ barekube_node_agent_arches[ansible_facts['architecture']] }}"
+
+- name: Get the node-agent files on this machine
+  run_once: true
+  delegate_to: localhost
+  vars:
+    ansible_become: false
+    barekube_agent_arches: >-
+      {{ ansible_play_hosts_all
+      | map('extract', hostvars, 'barekube_agent_arch') | unique | list }}
+  block:
+    - name: Make a work directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: barekube-agent.
+      register: barekube_agent_work
+      changed_when: false
+
+    - name: Use the local node-agent files
+      ansible.builtin.copy:
+        src: "{{ barekube_node_agent_dir }}/node-agent-linux-{{ item }}"
+        dest: "{{ barekube_agent_work.path }}/node-agent-linux-{{ item }}"
+        mode: "0644"
+      loop: "{{ barekube_agent_arches }}"
+      changed_when: false
+      when: barekube_node_agent_dir | length > 0
+
+    - name: Download and verify the release
+      when: barekube_node_agent_dir | length == 0
+      block:
+        - name: Download the node-agent files
+          ansible.builtin.get_url:
+            url: "{{ barekube_release_url }}/{{ item }}"
+            dest: "{{ barekube_agent_work.path }}/{{ item }}"
+            mode: "0644"
+          loop: "{{ ['node-agent.SHA256SUMS'] + barekube_agent_files }}"
+          changed_when: false
+          vars:
+            barekube_agent_files: >-
+              {{ (barekube_agent_arches
+              | map('regex_replace', '^(.*)$', 'node-agent-linux-\1') | list)
+              + (barekube_agent_arches
+              | map('regex_replace', '^(.*)$', 'node-agent-linux-\1.sigstore.json') | list) }}
+
+        - name: Check the checksums
+          ansible.builtin.command: sha256sum --check --status --ignore-missing node-agent.SHA256SUMS
+          args:
+            chdir: "{{ barekube_agent_work.path }}"
+          changed_when: false
+
+        - name: Check the signatures, which must come from the release workflow of this repository
+          ansible.builtin.command:
+            argv:
+              - cosign
+              - verify-blob
+              - --bundle
+              - "{{ barekube_agent_work.path }}/node-agent-linux-{{ item }}.sigstore.json"
+              - --certificate-identity-regexp
+              - "{{ barekube_signer_identity }}"
+              - --certificate-oidc-issuer
+              - https://token.actions.githubusercontent.com
+              - "{{ barekube_agent_work.path }}/node-agent-linux-{{ item }}"
+          loop: "{{ barekube_agent_arches }}"
+          changed_when: false
+          when: barekube_verify_signature | bool
+
+- name: Put the node-agent on the node
+  ansible.builtin.copy:
+    src: "{{ barekube_agent_work.path }}/node-agent-linux-{{ barekube_agent_arch }}"
+    dest: /var/tmp/barekube-node-agent
+    owner: root
+    group: root
+    mode: "0755"
+  # A temporary file, so the task is not a change; the CLI reports the change.
+  changed_when: false
+
+- name: Install the node-agent
+  ansible.builtin.include_tasks: install.yml
+  vars:
+    barekube_install_argv: >-
+      {{ ['barekube', 'install', 'node-agent', '--yes',
+      '--binary', '/var/tmp/barekube-node-agent',
+      '--console-addr', barekube_console_address,
+      '--node-name', barekube_console_node_name,
+      '--port', barekube_console_port | string,
+      '--heartbeat-interval', barekube_console_heartbeat_interval]
+      + ['--operations', barekube_console_effective_operations | join(',')]
+      + (['--etcd-metrics-url', barekube_console_etcd_metrics_url]
+      if barekube_console_etcd_metrics_url | length > 0 and inventory_hostname in groups['masters'] else [])
+      + (['--api-vip', barekube_console_api_vip, '--api-gateway', barekube_console_api_gateway]
+      if barekube_console_api_vip | length > 0 and barekube_console_api_gateway | length > 0
+      and inventory_hostname in groups['masters'] else []) }}
+    barekube_install_env:
+      CONSOLE_NODE_TOKEN: "{{ barekube_console_node_token }}"
+
+# The CLI prints the certificate fingerprint just before its final state line.
+- name: Remember the certificate fingerprint of the node
+  ansible.builtin.set_fact:
+    barekube_fingerprint: >-
+      {{ (barekube_result.stdout_lines | select('match', '^fingerprint [0-9a-f]{64}$') | first) | split(' ') | last }}
+
+- name: Remove the temporary copy of the node-agent
+  ansible.builtin.file:
+    path: /var/tmp/barekube-node-agent
+    state: absent
+  changed_when: false
+
+- name: Remove the work directory
+  ansible.builtin.file:
+    path: "{{ barekube_agent_work.path }}"
+    state: absent
+  changed_when: false
+  run_once: true
+  delegate_to: localhost
+  vars:
+    ansible_become: false

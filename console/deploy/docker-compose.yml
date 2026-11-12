@@ -1,0 +1,35 @@
+# The barekube console: the web UI that manages the cluster's nodes.
+#
+#   ./generate-tokens.sh            # writes .env with two random tokens, or write .env yourself:
+#                                   #   CONSOLE_UI_TOKEN=... and CONSOLE_NODE_TOKEN=... (or export them)
+#   mkdir -p config/credentials     # config/config.yaml and one fingerprint file per node
+#   docker compose up -d
+#
+# config/ is written by the Ansible playbooks when barekube_console_export_dir
+# points to it; see ../docs/agents.md for writing it by hand. The UI is on port 8080:
+# put it behind your own TLS proxy or keep it on a trusted network.
+services:
+  console:
+    image: ${CONSOLE_IMAGE:-ghcr.io/kostiantyn-matsebora/barekube-console}:${CONSOLE_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "${CONSOLE_PORT:-8080}:8080"
+    environment:
+      # Opens the web UI and every node action.
+      CONSOLE_UI_TOKEN: ${CONSOLE_UI_TOKEN:?set it in .env or the environment, or run ./generate-tokens.sh}
+      # Shared with every node-agent: pass the same value to
+      # `barekube install node-agent` or barekube_console_node_token.
+      CONSOLE_NODE_TOKEN: ${CONSOLE_NODE_TOKEN:?set it in .env or the environment, or run ./generate-tokens.sh}
+      # Optional. Lets another system start workflows. It reads nothing.
+      CONSOLE_AUTOMATION_TOKEN: ${CONSOLE_AUTOMATION_TOKEN:-}
+    volumes:
+      - ./config/config.yaml:/etc/console/config.yaml:ro
+      - ./config/credentials:/secrets/node-agent:ro
+      - console-data:/config
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+
+volumes:
+  console-data:

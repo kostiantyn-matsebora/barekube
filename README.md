@@ -1,6 +1,7 @@
 # Barekube - bare-metal kubernetes platform
 
 [![CLI tests](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/cli-tests.yml/badge.svg?branch=master)](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/cli-tests.yml)
+[![Console tests](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/console-tests.yml/badge.svg?branch=master)](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/console-tests.yml)
 [![E2E cluster](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/e2e.yml/badge.svg?branch=master)](https://github.com/kostiantyn-matsebora/barekube/actions/workflows/e2e.yml)
 [![Release](https://img.shields.io/github/v/release/kostiantyn-matsebora/barekube)](https://github.com/kostiantyn-matsebora/barekube/releases/latest)
 [![Galaxy](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgalaxy.ansible.com%2Fapi%2Fv3%2Fplugin%2Fansible%2Fcontent%2Fpublished%2Fcollections%2Findex%2Fkostiantyn_matsebora%2Fbarekube%2F&query=%24.highest_version.version&label=Galaxy&prefix=v&color=blue&logo=ansible)](https://galaxy.ansible.com/ui/repo/published/kostiantyn_matsebora/barekube/)
@@ -21,6 +22,7 @@ What barekube brings:
 - <img src="assets/icons/gvisor.svg" width="20" height="20" align="top"> [gVisor](https://gvisor.dev/) - security layer for running containers efficiently and securely.
 - <img src="assets/icons/longhorn.svg" width="20" height="20" align="top"> [Longhorn](https://longhorn.io/) storage prerequisites on the nodes.
 - <img src="assets/icons/ansible.svg" width="20" height="20" align="top"> [Ansible](https://www.ansible.com/) playbooks that build, change and remove a whole cluster from an inventory.
+- <img src="assets/icons/console.svg" width="20" height="20" align="top"> Optional: the [console](console/README.md), a control plane UI for the cluster, with a small agent on each node.
 
 Everything above that (HA API endpoint, load balancing, ingress, ...) is up to your platform.
 
@@ -47,6 +49,9 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
 
        barekube_disable: [servicelb, traefik]   # k3s components to turn off (default: [])
        barekube_tls_san: []                     # extra API server certificate names (default: [])
+
+       # barekube_console_agent: true                       # optional: agents for the console, step 5
+       # barekube_console_address: http://192.168.1.5:8080  # where the console runs
    ```
 
 3. Build the cluster, one of two ways (log in with a password instead of a key: add `-k`):
@@ -71,6 +76,8 @@ Everything above that (HA API endpoint, load balancing, ingress, ...) is up to y
    ```shell
    kubectl get nodes
    ```
+
+5. Optional: add the [console](console/README.md), the control plane UI of the cluster. Enable the agents in the inventory, run step 3 again and start the console with Docker Compose: [how](console/README.md#install).
 
 Add machines or change settings: run step 3 again. [More](orchestration/ansible/README.md). One node by hand: [use the CLI on each node](#using-the-cli).
 
@@ -153,6 +160,7 @@ Commands:
   install master-node             Install and configure another k3s master node
   install agent-node              Install and configure k3s agent node
   install gvisor                  Install and configure gVisor for existing k3s node
+  install node-agent              Install the node-agent that lets the optional barekube console manage this node
   install longhorn-dependencies   Install and configure Longhorn storage dependencies
   k3s
   k3s start                       Start k3s master node
@@ -182,6 +190,8 @@ export K3S_TOKEN='<token from the first master>'   # not a flag: stays out of ps
 barekube install initial-master --yes --tls-san k8s.home.lan --disable traefik
 barekube install master-node --yes --server https://192.168.1.10:6443
 barekube install agent-node  --yes --server https://192.168.1.10:6443
+
+CONSOLE_NODE_TOKEN='<shared token>' barekube install node-agent --yes --console-addr http://192.168.1.5:8080   # optional, for the console
 ```
 
 `--yes` skips the questions. Each command ends with `installed`, `updated` or `already installed`. Run again on an installed server with changed `--tls-san`, `--disable` or `--extra-args`, and k3s is reconfigured and restarted (`updated`); with the same ones, nothing happens.
