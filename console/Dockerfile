@@ -1,6 +1,6 @@
 # Build on the host platform and cross-compile. Under buildx the default runs
 # the whole compile in an emulated arm64 container, which takes minutes.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
